@@ -47,7 +47,7 @@ class _GenerateReportPageState extends State<GenerateReportPage> {
       lastDate: DateTime.now(),
     );
 
-    if (picked != null && picked != DateTimeRange(start: _startDate ?? DateTime.now(), end: _endDate ?? DateTime.now())) {
+    if (picked != null) {
       setState(() {
         _startDate = picked.start;
         _endDate = picked.end;
@@ -131,7 +131,7 @@ class _GenerateReportPageState extends State<GenerateReportPage> {
                 title: ChartTitle(text: "Sales Report"),
                 legend: Legend(isVisible: true),
                 tooltipBehavior: TooltipBehavior(enable: true),
-                series: <ChartSeries>[
+                series: <CartesianSeries>[
                   ColumnSeries<SalesData, String>(
                     dataSource: _salesData,
                     xValueMapper: (SalesData sales, _) => sales.day,

@@ -44,6 +44,7 @@ class DatabaseHelper {
         price REAL NOT NULL,
         min_kg REAL NOT NULL,
         total_kg REAL NOT NULL,
+        description TEXT NOT NULL,
         image TEXT NOT NULL,
         status TEXT NOT NULL,
         FOREIGN KEY (farmer_id) REFERENCES farmers(id) ON DELETE CASCADE
@@ -105,6 +106,17 @@ class DatabaseHelper {
     return farmerId;
   }
 
+  Future<String?> getLoggedInUserPhone() async {
+    final db = await database;
+    List<Map<String, dynamic>> result = await db.query(
+        'users',
+        columns: ['phone'],
+        where: 'is_logged_in = ?',
+        whereArgs: [1]
+    );
+    return result.isNotEmpty ? result.first['phone'] as String : null;
+  }
+
   // ✅ Get Farmer by Phone (Fix: Return Full Farmer Data)
   Future<Map<String, dynamic>?> getFarmerByPhone(String phone) async {
     final db = await database;
@@ -115,7 +127,7 @@ class DatabaseHelper {
     );
     if (result.isNotEmpty) {
       return {
-        'id': result.first['id'] ?? "",
+        'id': result.first['id'] as int? ?? 0, // Ensure id is int
         'name': result.first['name'] ?? "Unknown",
         'phone': result.first['phone'] ?? "Not Available",
       };
@@ -145,6 +157,7 @@ class DatabaseHelper {
     required double price,
     required double minKg,
     required double totalKg,
+    required String description,
     required String image,
     required String status,
   }) async {
@@ -156,6 +169,7 @@ class DatabaseHelper {
       'price': price,
       'min_kg': minKg,
       'total_kg': totalKg,
+      'description': description,
       'image': image,
       'status': status,
     });

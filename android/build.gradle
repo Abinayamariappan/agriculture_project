@@ -16,3 +16,14 @@ subprojects {
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
+
+buildscript {
+    repositories {
+        google() // ✅ Ensure Google repository is available for Firebase
+        mavenCentral()
+    }
+    dependencies {
+        // Firebase Google Services Plugin
+        classpath 'com.google.gms:google-services:4.4.2'
+    }
+}

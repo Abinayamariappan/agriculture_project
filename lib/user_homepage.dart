@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
-import 'user_login_page.dart';
-import 'wishlist_page.dart';
-import 'order_tracking_page.dart';
 
 class UserHomePage extends StatefulWidget {
   @override
@@ -21,23 +18,6 @@ class _UserHomePageState extends State<UserHomePage> {
     {'name': 'Fresh Carrots', 'image': 'assets/carrot.jpg', 'price': '₹30/kg', 'description': 'Crisp and sweet carrots perfect for cooking and salads.'},
     {'name': 'Natural Honey', 'image': 'assets/honey.jpg', 'price': '₹150/jar', 'description': 'Pure natural honey without any preservatives.'},
   ];
-
-  ValueNotifier<List<String>> wishlist = ValueNotifier([]);
-  ValueNotifier<int> cartCount = ValueNotifier(0);
-
-  void toggleWishlist(String productName) {
-    List<String> updatedWishlist = List.from(wishlist.value);
-    if (updatedWishlist.contains(productName)) {
-      updatedWishlist.remove(productName);
-    } else {
-      updatedWishlist.add(productName);
-    }
-    wishlist.value = updatedWishlist;
-  }
-
-  void addToCart() {
-    cartCount.value++;
-  }
 
   void showProductDetails(BuildContext context, Map<String, String> product) {
     showModalBottomSheet(
@@ -68,21 +48,11 @@ class _UserHomePageState extends State<UserHomePage> {
               SizedBox(height: 10),
               Text(product['price']!, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
               SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () => addToCart(),
-                    icon: Icon(Icons.shopping_cart),
-                    label: Text("Add to Cart"),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () => toggleWishlist(product['name']!),
-                    icon: Icon(Icons.favorite),
-                    label: Text("Wishlist"),
-                  ),
-                ],
-              )
+              ElevatedButton.icon(
+                onPressed: () {},
+                icon: Icon(Icons.shopping_cart),
+                label: Text("Add to Cart"),
+              ),
             ],
           ),
         );
@@ -95,109 +65,214 @@ class _UserHomePageState extends State<UserHomePage> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.green,
-        title: Text("A2C", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+        title: Row(
+          children: [
+            Image.asset('assets/C.png', height: 40), // Circular Logo
+            SizedBox(width: 8),
+            Text("A2C", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)), // App Name
+          ],
+        ),
         actions: [
-          IconButton(
-            icon: Icon(Icons.account_circle),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => UserLoginPage())),
-          ),
-          ValueListenableBuilder(
-            valueListenable: wishlist,
-            builder: (context, value, child) => IconButton(
-              icon: Icon(Icons.favorite, color: value.isNotEmpty ? Colors.red : Colors.white),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => WishlistPage(
-                    wishlist: productList.where((product) => wishlist.value.contains(product['name'])).toList(),
-                    onRemove: (productName) => toggleWishlist(productName),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          ValueListenableBuilder(
-            valueListenable: cartCount,
-            builder: (context, value, child) => Stack(
-              children: [
-                IconButton(
-                  icon: Icon(Icons.shopping_cart),
-                  onPressed: () {},
-                ),
-                if (value > 0)
-                  Positioned(
-                    right: 6,
-                    top: 6,
-                    child: CircleAvatar(
-                      radius: 8,
-                      backgroundColor: Colors.red,
-                      child: Text('$value', style: TextStyle(fontSize: 12, color: Colors.white)),
-                    ),
-                  )
-              ],
-            ),
-          ),
-          IconButton(
-            icon: Icon(Icons.local_shipping),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => OrderTrackingPage()),
-            ),
-          ),
+          IconButton(icon: Icon(Icons.person), onPressed: () { /* Navigate to Profile */ }),
+          IconButton(icon: Icon(Icons.favorite), onPressed: () { /* Navigate to Wishlist */ }),
+          IconButton(icon: Icon(Icons.shopping_cart), onPressed: () { /* Navigate to Cart */ }),
+          IconButton(icon: Icon(Icons.delivery_dining), onPressed: () { /* Navigate to Delivery Tracking */ }),
         ],
       ),
-      body: Column(
-        children: [
-          CarouselSlider(
-            options: CarouselOptions(height: 200, autoPlay: true, enlargeCenterPage: true),
-            items: carouselImages.map((image) {
-              return ClipRRect(
-                borderRadius: BorderRadius.circular(15),
-                child: Image.asset(image, fit: BoxFit.cover, width: 1000),
-              );
-            }).toList(),
-          ),
-          Expanded(
-            child: GridView.builder(
-              padding: EdgeInsets.all(10),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                childAspectRatio: 0.7,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-              ),
-              itemCount: productList.length,
-              itemBuilder: (context, index) {
-                var product = productList[index];
-                return GestureDetector(
-                  onTap: () => showProductDetails(context, product),
-                  child: Card(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                    elevation: 5,
-                    child: Column(
-                      children: [
-                        Expanded(
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
-                            child: Image.asset(product['image']!, fit: BoxFit.cover),
+
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            // Search Bar with Filter Icon
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.search, color: Colors.grey),
+                          Expanded(
+                            child: TextField(
+                              decoration: InputDecoration(
+                                hintText: 'Search products...',
+                                border: InputBorder.none,
+                              ),
+                            ),
                           ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Column(
-                            children: [
-                              Text(product['name']!, style: TextStyle(fontWeight: FontWeight.bold)),
-                              Text(product['price']!, style: TextStyle(color: Colors.green)),
-                            ],
+                          IconButton(
+                            icon: Icon(Icons.filter_list),
+                            onPressed: () {
+                              // Add filter functionality
+                            },
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                );
-              },
+                ],
+              ),
             ),
-          ),
+            // Carousel Slider
+            CarouselSlider(
+              options: CarouselOptions(
+                height: 200,
+                autoPlay: true,
+                enlargeCenterPage: true,
+              ),
+              items: carouselImages.map((image) {
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(15),
+                  child: Image.asset(image, fit: BoxFit.cover, width: 1000),
+                );
+              }).toList(),
+            ),
+            Padding(
+              padding: EdgeInsets.all(10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: [Colors.green, Colors.lightGreen]),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent, // Replaces 'primary'
+                          shadowColor: Colors.transparent,
+                          padding: EdgeInsets.symmetric(vertical: 15),
+                        ),
+                        onPressed: () {},
+                        icon: Icon(Icons.local_hospital),
+                        label: Text("Crop Doctor"),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: [Colors.orange, Colors.deepOrange]),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent, // Replaces 'primary'
+                          shadowColor: Colors.transparent,
+                          padding: EdgeInsets.symmetric(vertical: 15),
+                        ),
+                        onPressed: () {},
+                        icon: Icon(Icons.work),
+                        label: Text("Jobs"),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+
+            Padding(
+              padding: EdgeInsets.all(10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text("Categories", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  TextButton(onPressed: () {}, child: Text('View All')),
+                ],
+              ),
+            ),
+            // Categories List
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  CategoryItem(icon: Icons.agriculture, label: "Crops"),
+                  CategoryItem(icon: Icons.grass, label: "Fertilizers"),
+                  CategoryItem(icon: Icons.local_florist, label: "Seeds"),
+                ],
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.all(10),
+              child: Text("All Products", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            ),
+            // Product List
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: 10, horizontal: 5),
+              child: GridView.builder(
+                physics: NeverScrollableScrollPhysics(),
+                shrinkWrap: true,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 0.7,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                ),
+                itemCount: productList.length,
+                itemBuilder: (context, index) {
+                  var product = productList[index];
+                  return GestureDetector(
+                    onTap: () => showProductDetails(context, product),
+                    child: Card(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      elevation: 5,
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(15),
+                              child: Image.asset(product['image']!, fit: BoxFit.cover, width: double.infinity),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(product['name']!, style: TextStyle(fontWeight: FontWeight.bold)),
+                                Text(product['price']!, style: TextStyle(color: Colors.green)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Category Widget
+class CategoryItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  CategoryItem({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 10),
+      child: Column(
+        children: [
+          CircleAvatar(radius: 30, backgroundColor: Colors.green, child: Icon(icon, color: Colors.white)),
+          SizedBox(height: 5),
+          Text(label, style: TextStyle(fontWeight: FontWeight.bold)),
         ],
       ),
     );

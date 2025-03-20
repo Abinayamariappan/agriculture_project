@@ -1,21 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';  // Import Provider package
-import 'package:path_provider/path_provider.dart'; // Ensure SQLite storage works
-import 'package:sqflite/sqflite.dart';  // Import SQLite
+import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart'; // Import Firebase
+import 'firebase_options.dart'; // Auto-generated Firebase config
 import 'splash_screen.dart';
-import 'database_helper.dart';  // Import your DB helper file
-import 'weather_provider.dart';  // Import your WeatherProvider file
+import 'weather_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();  // Required for async operations
 
-  // ✅ Debugging: Check database path
-  final dbPath = await getDatabasesPath();
-  print("📌 Database Path: $dbPath");
+  // ✅ Initialize Firebase
+ // await Firebase.initializeApp(
+  //  options: DefaultFirebaseOptions.currentPlatform,
+  //);
 
-  // ✅ Debugging: Ensure database initializes properly
-  final db = await DatabaseHelper.instance.database;
-  print("📌 Database Initialized Successfully: $db");
+  //print("📌 Firebase Initialized Successfully!");
 
   runApp(const MyApp());
 }

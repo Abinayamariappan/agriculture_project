@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'database_helper.dart'; // ✅ Import SQLite Database Helper
+import 'package:shared_preferences/shared_preferences.dart';
 
 class CropDetailsPage extends StatefulWidget {
   @override
@@ -13,6 +14,8 @@ class _CropDetailsPageState extends State<CropDetailsPage> {
   final TextEditingController _ratePerKgController = TextEditingController();
   final TextEditingController _minKgController = TextEditingController();
   final TextEditingController _totalKgController = TextEditingController(); // ✅ Added Total KG Field
+  final TextEditingController _descriptionController = TextEditingController(); // ✅ Add Crop Description Field
+
   File? _selectedImage;
   String _imageStatus = "No Image Uploaded"; // ✅ Track Image Upload Status
 
@@ -55,10 +58,16 @@ class _CropDetailsPageState extends State<CropDetailsPage> {
 
   // ✅ Get Farmer ID from Database
   Future<int?> _getFarmerId() async {
-    // 🔹 Replace 'USER_PHONE' with actual farmer's phone number (or login-based retrieval)
-    final farmer = await DatabaseHelper.instance.getFarmerByPhone('USER_PHONE');
-    return farmer?['id']; // Fetch farmer's ID from database
+    // Retrieve the logged-in farmer's phone number from SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    String? farmerPhone = prefs.getString('loggedInFarmerPhone'); // Ensure this key is stored at login
+
+    if (farmerPhone == null) return null; // Ensure the phone number is available
+
+    final farmer = await DatabaseHelper.instance.getFarmerByPhone(farmerPhone);
+    return farmer?['id'];
   }
+
 
   // ✅ Add Crop to Database
   void _addCrop() async {
@@ -66,6 +75,7 @@ class _CropDetailsPageState extends State<CropDetailsPage> {
         _ratePerKgController.text.isEmpty ||
         _minKgController.text.isEmpty ||
         _totalKgController.text.isEmpty || // ✅ Validate Total KG
+        _descriptionController.text.isEmpty ||
         _selectedImage == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter all fields and select an image')),
@@ -102,6 +112,7 @@ class _CropDetailsPageState extends State<CropDetailsPage> {
       price: ratePerKg,
       minKg: minKg,
       totalKg: totalKg, // ✅ Pass totalKg
+      description: _descriptionController.text,
       status: 'Available',
       image: _selectedImage?.path ?? '', // ✅ Ensure image is handled properly
     );
@@ -114,6 +125,7 @@ class _CropDetailsPageState extends State<CropDetailsPage> {
     _ratePerKgController.clear();
     _minKgController.clear();
     _totalKgController.clear(); // ✅ Clear Total KG
+    _descriptionController.clear();
     setState(() {
       _selectedImage = null;
       _imageStatus = "No Image Uploaded";
@@ -198,6 +210,7 @@ class _CropDetailsPageState extends State<CropDetailsPage> {
                         _buildTextField(_ratePerKgController, 'Rate per Kg', Icons.attach_money, isNumeric: true),
                         _buildTextField(_minKgController, 'Min Kg Purchase', Icons.scale, isNumeric: true),
                         _buildTextField(_totalKgController, 'Total Kg Available', Icons.shopping_cart, isNumeric: true),
+                        _buildTextField(_descriptionController, 'Crop Description', Icons.description),
 
                         const SizedBox(height: 15),
 

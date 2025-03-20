@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
-import 'dart:async';
 import 'database_helper.dart';
 
 class FarmerSalesPage extends StatefulWidget {
@@ -13,21 +12,21 @@ class FarmerSalesPage extends StatefulWidget {
 }
 
 class _FarmerSalesPageState extends State<FarmerSalesPage> with SingleTickerProviderStateMixin {
-  late int farmerId;
+  late TabController _tabController;
+  int farmerId = -1;
   String farmerName = "";
   String farmerPhone = "";
   List<Map<String, dynamic>> _products = [];
   String searchQuery = "";
   String filterBy = "All";
   bool isLoading = true;
-  late TabController _tabController;
-  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     farmerId = int.tryParse(widget.farmerId) ?? -1;
+
     if (farmerId == -1) {
       Future.delayed(Duration.zero, () {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -39,13 +38,6 @@ class _FarmerSalesPageState extends State<FarmerSalesPage> with SingleTickerProv
     }
     _loadFarmerDetails();
     _loadProducts();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    _debounce?.cancel();
-    super.dispose();
   }
 
   Future<void> _loadFarmerDetails() async {
@@ -66,11 +58,6 @@ class _FarmerSalesPageState extends State<FarmerSalesPage> with SingleTickerProv
     });
   }
 
-  Future<void> _deleteProduct(int productId) async {
-    await DatabaseHelper.instance.deleteProduct(productId);
-    _loadProducts();
-  }
-
   void _toggleAvailability(int index) async {
     setState(() {
       _products[index]['status'] = _products[index]['status'] == "Available" ? "Sold Out" : "Available";
@@ -78,41 +65,178 @@ class _FarmerSalesPageState extends State<FarmerSalesPage> with SingleTickerProv
     await DatabaseHelper.instance.updateProductStatus(_products[index]['id'], _products[index]['status']);
   }
 
-  List<Map<String, dynamic>> _filteredProducts(String category) {
-    return _products.where((product) =>
-    (category == "All" || product['category'] == category) &&
-        (filterBy == "All" || product['status'] == filterBy) &&
-        product['name'].toLowerCase().contains(searchQuery.toLowerCase())
-    ).toList();
+  Widget _buildProductList(String category) {
+    List<Map<String, dynamic>> filteredProducts = _products.where((product) {
+      bool matchesCategory = category == "All" || product['category'] == category;
+      bool matchesSearch = searchQuery.isEmpty || product['name'].toLowerCase().contains(searchQuery.toLowerCase());
+      bool matchesFilter = filterBy == "All" || product['status'] == filterBy;
+      return matchesCategory && matchesSearch && matchesFilter;
+    }).toList();
+
+    return filteredProducts.isEmpty
+        ? const Center(child: Text("No products available", style: TextStyle(fontSize: 18)))
+        : ListView.builder(
+      itemCount: filteredProducts.length,
+      itemBuilder: (context, index) => _buildProductCard(filteredProducts[index]),
+    );
   }
 
-  void _onSearchChanged(String value) {
-    if (_debounce?.isActive ?? false) _debounce!.cancel();
-    _debounce = Timer(const Duration(milliseconds: 300), () {
-      setState(() => searchQuery = value);
-    });
+  Widget _buildProductCard(Map<String, dynamic> product) {
+    return Card(
+      margin: const EdgeInsets.all(8.0),
+      elevation: 5,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          product['image'] != null && product['image'].isNotEmpty
+              ? Image.file(File(product['image']), width: double.infinity, height: 150, fit: BoxFit.cover)
+              : const Icon(Icons.image, size: 150, color: Colors.grey),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(product['name'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text("₹${product['price']} | Min: ${product['min_kg']} kg | Total: ${product['total_kg']} kg"),
+                Text("Description: ${product['description']}", maxLines: 2, overflow: TextOverflow.ellipsis),
+                SwitchListTile(
+                  title: const Text("Mark as Sold Out"),
+                  value: product['status'] == "Sold Out",
+                  onChanged: (value) => _toggleAvailability(_products.indexOf(product)),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.edit, color: Colors.blue),
+                      onPressed: () {}, // Implement edit functionality
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      onPressed: () => _deleteProduct(product['id']),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
-  void _showFilterOptions() {
+  void _deleteProduct(int productId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Delete Product"),
+        content: const Text("Are you sure you want to delete this product?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () {
+              DatabaseHelper.instance.deleteProduct(productId);
+              _loadProducts();
+              Navigator.pop(context);
+            },
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchAndFilterRow() {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Row(
+        children: [
+          // Search Bar
+          Expanded(
+            child: TextField(
+              onChanged: (value) {
+                setState(() {
+                  searchQuery = value;
+                });
+              },
+              decoration: InputDecoration(
+                hintText: "Search products...",
+                prefixIcon: const Icon(Icons.search, color: Colors.green),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(30),
+                  borderSide: BorderSide.none,
+                ),
+                filled: true,
+                fillColor: Colors.grey[200],
+                contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 15),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10), // Spacing
+
+          // Filter Icon Button
+          IconButton(
+            icon: const Icon(Icons.filter_list, color: Colors.green),
+            onPressed: _showFilterBottomSheet,
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  // Show Bottom Sheet for Filter
+  void _showFilterBottomSheet() {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)), // Rounded top corners
-      ),
-      builder: (BuildContext context) {
-        return Container(
-          padding: const EdgeInsets.all(16),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                "Filter Products",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ListTile(
+                title: const Text("All"),
+                leading: Radio(
+                  value: "All",
+                  groupValue: filterBy,
+                  onChanged: (value) {
+                    setState(() {
+                      filterBy = value.toString();
+                    });
+                    Navigator.pop(context);
+                  },
+                ),
               ),
-              const SizedBox(height: 10),
-              _buildFilterOption("All"),
-              _buildFilterOption("Available"),
-              _buildFilterOption("Sold Out"),
+              ListTile(
+                title: const Text("Available"),
+                leading: Radio(
+                  value: "Available",
+                  groupValue: filterBy,
+                  onChanged: (value) {
+                    setState(() {
+                      filterBy = value.toString();
+                    });
+                    Navigator.pop(context);
+                  },
+                ),
+              ),
+              ListTile(
+                title: const Text("Sold Out"),
+                leading: Radio(
+                  value: "Sold Out",
+                  groupValue: filterBy,
+                  onChanged: (value) {
+                    setState(() {
+                      filterBy = value.toString();
+                    });
+                    Navigator.pop(context);
+                  },
+                ),
+              ),
             ],
           ),
         );
@@ -120,25 +244,11 @@ class _FarmerSalesPageState extends State<FarmerSalesPage> with SingleTickerProv
     );
   }
 
-  Widget _buildFilterOption(String option) {
-    return ListTile(
-      title: Text(option, style: const TextStyle(fontSize: 16)),
-      trailing: filterBy == option
-          ? const Icon(Icons.check_circle, color: Colors.green) // Show checkmark if selected
-          : null,
-      onTap: () {
-        setState(() => filterBy = option);
-        Navigator.pop(context);
-      },
-    );
-  }
-
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Farmer Sales', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+        title: const Text("Farmer Sales Product"),  // Set the title
         backgroundColor: Colors.green,
         bottom: TabBar(
           controller: _tabController,
@@ -152,11 +262,12 @@ class _FarmerSalesPageState extends State<FarmerSalesPage> with SingleTickerProv
           ],
         ),
       ),
+
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : Column(
         children: [
-          _buildSearchAndFilterRow(),
+          _buildSearchAndFilterRow(),  // Add search bar and filter
           Expanded(
             child: TabBarView(
               controller: _tabController,
@@ -170,70 +281,6 @@ class _FarmerSalesPageState extends State<FarmerSalesPage> with SingleTickerProv
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildSearchAndFilterRow() {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              onChanged: _onSearchChanged,
-              decoration: InputDecoration(
-                labelText: "Search Products",
-                hintText: "Search...",
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(30), // Rounded corners
-                  borderSide: BorderSide.none, // Remove default border
-                ),
-                filled: true,
-                fillColor: Colors.grey[200], // Light background color
-                contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20), // Padding inside the field
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          IconButton(
-            icon: const Icon(Icons.filter_list, color: Colors.green, size: 30),
-            onPressed: _showFilterOptions,
-          ),
-        ],
-      ),
-    );
-  }
-
-
-  Widget _buildProductList(String category) {
-    final filteredProducts = _filteredProducts(category);
-    return ListView.builder(
-      itemCount: filteredProducts.length,
-      itemBuilder: (context, index) {
-        final product = filteredProducts[index];
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-          child: Card(
-            margin: const EdgeInsets.all(8.0),
-            elevation: 5,
-            child: ListTile(
-              leading: Icon(Icons.shopping_bag, color: Colors.green),
-              title: Text(product['name'], style: TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text("₹${product['price']} - ${product['status']}", style: TextStyle(color: Colors.grey[700])),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () {}),
-                  IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => _deleteProduct(product['id'])),
-                ],
-              ),
-              onTap: () => _toggleAvailability(index),
-            ),
-          ),
-        );
-      },
     );
   }
 }

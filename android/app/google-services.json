@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "546326003974",
+    "project_id": "agricultureproject-2bab3",
+    "storage_bucket": "agricultureproject-2bab3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:546326003974:android:9318f04a4486a4b3081e87",
+        "android_client_info": {
+          "package_name": "com.example.agriculture_project"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA05OIhM5BJEVt90uiNjHZbCOijFi5zu8Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

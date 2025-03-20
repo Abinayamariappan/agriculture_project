@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:ui'; // Required for BackdropFilter
 import 'package:flutter/material.dart';
 import 'database_helper.dart';
@@ -37,6 +38,7 @@ class _FarmerLoginState extends State<FarmerLogin> {
   }
 
   // ✅ Login Function
+
   Future<void> _login() async {
     print("📌 Login Attempted with Phone: ${_phoneController.text}");
 
@@ -47,6 +49,10 @@ class _FarmerLoginState extends State<FarmerLogin> {
       String farmerId = farmer['id']?.toString() ?? "";  // Ensure it's a string
       String name = farmer['name'] ?? "Unknown";
       String phone = farmer['phone'] ?? "Not Available";
+
+      // ✅ Store the logged-in phone number in SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('loggedInFarmerPhone', phone);
 
       if (mounted) {
         Navigator.pushReplacement(
@@ -68,8 +74,6 @@ class _FarmerLoginState extends State<FarmerLogin> {
       }
     }
   }
-
-
 
   @override
   Widget build(BuildContext context) {

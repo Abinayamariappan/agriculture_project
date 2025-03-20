@@ -18,6 +18,7 @@ import 'govt_schemes_page.dart';
 import 'profile_page.dart';
 import 'farmer_login.dart';
 import 'package:geocoding/geocoding.dart';
+import 'report_page.dart';
 
 
 class FarmerDashboard extends StatefulWidget {
@@ -94,8 +95,8 @@ class _FarmerDashboardState extends State<FarmerDashboard> with SingleTickerProv
 
       if (placemarks.isNotEmpty) {
         Placemark place = placemarks.first;
-        String district = place.subAdministrativeArea ?? "Unknown District";
-        String state = place.administrativeArea ?? "Unknown State";
+        String district = "Tirunelveli";  // Fixed district name
+        String state = place.administrativeArea ?? "Unknown State";  // Dynamically get state
 
         setState(() {
           currentLocation = "$district, $state";
@@ -104,7 +105,7 @@ class _FarmerDashboardState extends State<FarmerDashboard> with SingleTickerProv
         Provider.of<WeatherProvider>(context, listen: false).loadWeather(district);
       } else {
         setState(() {
-          currentLocation = "Location not found.";
+          currentLocation = "Tirunelveli, Unknown State";  // Default district with unknown state
         });
       }
     } catch (e) {
@@ -121,15 +122,17 @@ class _FarmerDashboardState extends State<FarmerDashboard> with SingleTickerProv
   }
 
   Future<void> _logout() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('loggedInFarmerPhone'); // Clear stored farmer phone
+
     if (mounted) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const FarmerLogin()),
+        MaterialPageRoute(builder: (context) => FarmerLogin()),
       );
     }
   }
+
 
   String _getWeatherBackground(String weatherCondition) {
     if (weatherCondition.contains("Rain")) return 'assets/Rainy.jpg';
@@ -388,6 +391,7 @@ class _FarmerDashboardState extends State<FarmerDashboard> with SingleTickerProv
                         _buildDashboardButton("Plant Disease", Colors.cyan, Icons.local_florist, PlantDiseasePage()),
                         _buildDashboardButton("Soil Type", Colors.indigo, Icons.terrain, SoilTypePage()),
                         _buildDashboardButton("Government Schemes", Colors.green, Icons.account_balance, GovtSchemesPage()),
+                        _buildDashboardButton("Report", Colors.red, Icons.report, ReportPage()), // Added Report button
                     ],
                   ),
                 ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'farmer_login.dart';
 import 'admin_login.dart';
+import 'footer.dart'; // Import the footer widget
 import 'user_navigation_bar.dart';
 
 class HomePage extends StatefulWidget {
@@ -126,6 +127,7 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
+      bottomNavigationBar: FooterWidget(), // ✅ Placed correctly at the bottom
     );
   }
 }

@@ -75,6 +75,20 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  /// Build Address Section
+  Widget _buildAddressSection() {
+    if (_isEditing) {
+      return TextField(
+        controller: _addressController,
+        decoration: const InputDecoration(labelText: "Address"),
+        onChanged: (value) => _address = value, // Update address in real-time
+        onSubmitted: (value) => _saveAddress(), // Save when done typing
+      );
+    } else {
+      return _buildProfileDetail("Address", _address.isNotEmpty ? _address : "No address provided", Icons.location_on);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -118,17 +132,8 @@ class _ProfilePageState extends State<ProfilePage> {
             // Phone
             _buildProfileDetail("Phone", widget.phone, Icons.phone),
 
-            // Address
-            ListTile(
-              leading: const Icon(Icons.location_on, color: Colors.green),
-              title: TextField(
-                controller: _addressController,
-                decoration: const InputDecoration(labelText: "Address"),
-                onChanged: (value) => _address = value, // Update address in real-time
-                onSubmitted: (value) => _saveAddress(), // Save when done typing
-                enabled: _isEditing, // Enable editing only when _isEditing is true
-              ),
-            ),
+            // Address Section
+            _buildAddressSection(),
           ],
         ),
       ),
