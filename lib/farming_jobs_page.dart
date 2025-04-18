@@ -99,12 +99,24 @@ class _FarmingJobsPageState extends State<FarmingJobsPage> with SingleTickerProv
     await db.delete(table, where: 'id = ?', whereArgs: [jobId]);
   }
 
-  void _toggleJobStatus(int jobId) async {
-    final job = _jobs.firstWhere((j) => j['id'] == jobId);
-    final newStatus = job['status'] == "Pending" ? "Completed" : "Pending";
-    await updateJobStatus(job['category'], jobId, newStatus);
-    await _loadJobs();
+  void _toggleJobStatus(int jobId, String category) async {
+    final job = _jobs.firstWhere(
+          (j) => j['id'] == jobId && j['category'] == category,
+      orElse: () => {},
+    );
+
+    if (job.isNotEmpty) {
+      final newStatus = job['status'] == "Pending" ? "Completed" : "Pending";
+      await updateJobStatus(category, jobId, newStatus);
+      await _loadJobs();
+      setState(() {}); // force rebuild
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Job marked as $newStatus")),
+      );
+    }
   }
+
+
 
   Widget _buildSearchAndFilterRow() {
     return Padding(
@@ -235,7 +247,7 @@ class _FarmingJobsPageState extends State<FarmingJobsPage> with SingleTickerProv
                         job['status'] == "Pending" ? Icons.check_circle : Icons.replay,
                         color: job['status'] == "Pending" ? Colors.green : Colors.orange,
                       ),
-                      onPressed: () => _toggleJobStatus(job['id']),
+                      onPressed: () => _toggleJobStatus(job['id'], job['category']),
                     ),
                     IconButton(
                       icon: const Icon(Icons.delete, color: Colors.redAccent),

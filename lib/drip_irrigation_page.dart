@@ -137,7 +137,7 @@ class _DripIrrigationPageState extends State<DripIrrigationPage> {
         description: _descriptionController.text.trim(),
         image: imageBytes, // Store the image as bytes
         wages: wages,
-        status: 'Worker Requested',
+        status: 'pending',
       );
 
       // Show success dialog after submission

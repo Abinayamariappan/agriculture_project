@@ -134,7 +134,7 @@ class _PesticidePageState extends State<PesticidePage> {
         description: _descriptionController.text.trim(),
         image: imageBytes, // Store as BLOB
         wages: wages,
-        status: 'Worker Requested',
+        status: 'pending',
       );
 
       _showSuccessDialog();

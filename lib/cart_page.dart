@@ -42,18 +42,27 @@ class _CartPageState extends State<CartPage> {
     });
   }
 
-
   Future<void> updateQuantity(int index, int change) async {
-    int newQuantity = cartItems[index]['quantity'] + change;
+    int currentQuantity = cartItems[index]['quantity'];
+    int newQuantity = currentQuantity + change;
+    int maxQuantity = cartItems[index]['totalKg'] ?? 999999; // Fallback large value if totalKg missing
 
     if (newQuantity <= 0) {
       await removeItem(index);
       return;
     }
 
+    if (newQuantity > maxQuantity) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Maximum available quantity is ${maxQuantity} kg")),
+      );
+      return;
+    }
+
     setState(() {
       cartItems[index] = Map<String, dynamic>.from(cartItems[index]);
       cartItems[index]['quantity'] = newQuantity;
+      totalAmount = _calculateTotal(); // Recalculate after update
     });
 
     int result = await DatabaseHelper().updateCartItemQuantity(
@@ -63,7 +72,7 @@ class _CartPageState extends State<CartPage> {
 
     if (result <= 0) {
       setState(() {
-        cartItems[index]['quantity'] = newQuantity - change;
+        cartItems[index]['quantity'] = currentQuantity; // Rollback on failure
         totalAmount = _calculateTotal();
       });
       ScaffoldMessenger.of(context).showSnackBar(

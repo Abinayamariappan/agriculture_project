@@ -1,12 +1,11 @@
 import '../models/product_model.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import 'dart:developer';  // ✅ Added for logging
+import 'dart:developer';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:shared_preferences/shared_preferences.dart';
-
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -20,7 +19,7 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('agriculture2.db');
+    _database = await _initDB('atoc1.db');
     return _database!;
   }
 
@@ -31,7 +30,7 @@ class DatabaseHelper {
 
       return await openDatabase(
         path,
-        version: 12,
+        version: 13,
         onCreate: _createDB,
         onUpgrade: _onUpgrade,
         onDowngrade: onDatabaseDowngradeDelete, // 🔽 Added for safety
@@ -83,7 +82,6 @@ class DatabaseHelper {
         )
       ''');
 
-
       await db.execute('''
       CREATE TABLE crops (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -132,7 +130,6 @@ class DatabaseHelper {
         )
       ''');
 
-
       await db.execute('''
           CREATE TABLE farmlands (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -164,7 +161,6 @@ class DatabaseHelper {
           created_at INTEGER DEFAULT (strftime('%s', 'now')),
           FOREIGN KEY (farmer_id) REFERENCES farmers(id) ON DELETE CASCADE
         );
-
     ''');
 
       await db.execute('''
@@ -181,7 +177,6 @@ class DatabaseHelper {
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (farmer_id) REFERENCES farmers(id) ON DELETE CASCADE
       );
-
     ''');
 
       await db.execute('''
@@ -221,6 +216,16 @@ class DatabaseHelper {
         );
     ''');
 
+      await db.execute('''
+      CREATE TABLE cart (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        price REAL,
+        quantity INTEGER,
+        totalKg INTEGER,
+        user_id INTEGER
+      )
+   ''');
       // Insert default jobs
       await db.insert('jobs', {'name': 'Manage Farmland', 'category': 'Farmland', 'status': 'Pending',});
       await db.insert('jobs', {'name': 'Drip Irrigation Setup', 'category': 'Drip Irrigation', 'status': 'Pending'});
@@ -233,15 +238,6 @@ class DatabaseHelper {
       )
     ''');
 
-      await db.execute('''
-      CREATE TABLE cart (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        price REAL,
-        quantity INTEGER,
-        user_id INTEGER
-      )
-   ''');
 
       await db.execute('''
           CREATE TABLE orders (
@@ -253,7 +249,6 @@ class DatabaseHelper {
             user_id INTEGER,  -- Add this line
             FOREIGN KEY (user_id) REFERENCES users(id)
           );
-
     ''');
 
       await db.execute('''
@@ -400,24 +395,39 @@ class DatabaseHelper {
 
         }
         if(oldVersion < 11) {
-          await db.execute('''
-        CREATE TABLE IF NOT EXISTS cart (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT,
-          price REAL,
-          quantity INTEGER,
-          user_id INTEGER
-        )
-      ''');
-        }
-
-        if(oldVersion < 12){
           await db.execute("ALTER TABLE fertilizers ADD COLUMN category TEXT");
           await db.execute("ALTER TABLE seeds ADD COLUMN category TEXT");
           await db.execute('ALTER TABLE crops ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP');
           await db.execute('ALTER TABLE fertilizers ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP');
+        }
 
-
+        if(oldVersion < 12){
+          await txn.execute('''
+          CREATE TABLE IF NOT EXISTS cart (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            price REAL,
+            quantity INTEGER,
+            totalKg INTEGER,
+            user_id INTEGER
+          )
+   ''');
+          if(oldVersion < 13){
+            await txn.execute('''
+              CREATE TABLE IF NOT EXISTS customer_jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT,
+                location TEXT,
+                description TEXT,
+                status TEXT DEFAULT 'Pending',
+                customer_name TEXT,
+                customer_phone TEXT,
+                image TEXT,
+                customer_id INTEGER,  -- Add this line
+                FOREIGN KEY (customer_id) REFERENCES users(id)
+              );
+          ''');
+          }
         }
 
         print("✅ Database Upgraded to Version $newVersion");
@@ -1263,7 +1273,8 @@ class DatabaseHelper {
         'name': item['name'],
         'price': item['price'],
         'quantity': item['quantity'],
-        'user_id': currentUserId, // 👈 Include user ID
+        'totalKg': item['totalKg'],  // Add totalKg here
+        'user_id': currentUserId,    // Include user ID
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );

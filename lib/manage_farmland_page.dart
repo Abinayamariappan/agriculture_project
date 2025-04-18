@@ -146,7 +146,7 @@ class _ManageFarmlandPageState extends State<ManageFarmlandPage> {
         description: _descriptionController.text.trim(),
         wages: wages,
         image: imageBytes,
-        status: 'Worker Requested',
+        status: 'pending',
       );
 
       _showSuccessDialog();

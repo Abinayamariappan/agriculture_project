@@ -137,58 +137,146 @@ class _UserHomePageState extends State<UserHomePage> {
   }
 
   void showProductDetails(BuildContext context, Product product) {
+    double selectedQuantity = product.minKg; // Start with minimum quantity
+
     showModalBottomSheet(
       context: context,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
       ),
+      backgroundColor: Colors.white,
+      isScrollControlled: true, // Allow the sheet to adjust its height based on content
       builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Text(product.name, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                ),
-                SizedBox(height: 10),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(15),
-                  child: Image.memory(product.image!, height: 200, fit: BoxFit.cover),
-                ),
-                SizedBox(height: 10),
-                Text(product.description, style: TextStyle(fontSize: 16)),
-                SizedBox(height: 10),
-                Text("Price: ₹${product.price}", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
-                SizedBox(height: 10),
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    SharedPreferences prefs = await SharedPreferences.getInstance();
-                    int userId = prefs.getInt('currentUserId') ?? 0;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Text(
+                        product.name,
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 15),
+                    if (product.image != null)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(15),
+                        child: Image.memory(
+                          product.image!,
+                          height: 220,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    SizedBox(height: 15),
+                    Text(
+                      product.description,
+                      style: TextStyle(fontSize: 16, color: Colors.black54),
+                    ),
+                    SizedBox(height: 15),
+                    Text(
+                      "Price per kg: ₹${product.price}",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                      ),
+                    ),
+                    SizedBox(height: 10),
+                    Text(
+                      "Minimum Quantity: ${product.minKg} kg",
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    Text(
+                      "Available Quantity: ${product.totalKg} kg",
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    SizedBox(height: 20),
 
-                    Map<String, dynamic> cartItem = {
-                      'name': product.name,
-                      'image': product.image,
-                      'price': product.price,
-                      'quantity': 1,
-                      'userId': userId, // ✅ Associate with user
-                    };
-                    await DatabaseHelper().addToCart(cartItem);
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("${product.name} added to cart!")),
-                    );
-                  },
+                    // Quantity Selection
+                    Row(
+                      children: [
+                        Text(
+                          "Quantity (kg): ",
+                          style: TextStyle(fontSize: 16),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.remove, color: Colors.green),
+                          onPressed: () {
+                            if (selectedQuantity > product.minKg) {
+                              setState(() {
+                                selectedQuantity -= 1;
+                              });
+                            }
+                          },
+                        ),
+                        Text(
+                          "${selectedQuantity.toStringAsFixed(0)}",
+                          style: TextStyle(fontSize: 18),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.add, color: Colors.green),
+                          onPressed: () {
+                            if (selectedQuantity < product.totalKg) {
+                              setState(() {
+                                selectedQuantity += 1;
+                              });
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 20),
 
-                  icon: Icon(Icons.shopping_cart),
-                  label: Text("Add to Cart"),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                    // Add to Cart Button
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        SharedPreferences prefs = await SharedPreferences.getInstance();
+                        int userId = prefs.getInt('currentUserId') ?? 0;
+
+                        Map<String, dynamic> cartItem = {
+                          'name': product.name,
+                          'image': product.image,
+                          'price': product.price,
+                          'quantity': selectedQuantity.toInt(), // Ensure the quantity is an integer
+                          'totalKg': product.totalKg, // Include the available max quantity
+                          'userId': userId,
+                        };
+
+                        await DatabaseHelper().addToCart(cartItem);
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text("${product.name} added to cart!")),
+                        );
+                      },
+                      icon: Icon(Icons.shopping_cart),
+                      label: Text(
+                        "Add to Cart",
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green, // Use backgroundColor instead of primary
+                        padding: EdgeInsets.symmetric(vertical: 15),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                      ),
+                    )
+
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );
@@ -477,23 +565,10 @@ class _UserHomePageState extends State<UserHomePage> {
                                       ),
                                       IconButton(
                                         icon: Icon(Icons.shopping_cart, color: Colors.green),
-                                        onPressed: () async {
-                                          SharedPreferences prefs = await SharedPreferences.getInstance();
-                                          int userId = prefs.getInt('currentUserId') ?? 0;
-
-                                          Map<String, dynamic> cartItem = {
-                                            'name': product.name,
-                                            'image': product.image,
-                                            'price': product.price,
-                                            'quantity': 1,
-                                            'userId': userId, // ✅ Associate with user
-                                          };
-                                          await DatabaseHelper().addToCart(cartItem);
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(content: Text("${product.name} added to cart!")),
-                                          );
+                                        onPressed: () {
+                                          // open bottom sheet so user can pick quantity between minKg and totalKg
+                                          showProductDetails(context, product);
                                         },
-
                                       ),
 
                                     ],
