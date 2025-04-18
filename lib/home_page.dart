@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'farmer_login.dart';
 import 'admin_login.dart';
-import 'footer.dart'; // Import the footer widget
 import 'user_navigation_bar.dart';
 
 class HomePage extends StatefulWidget {
@@ -32,6 +31,7 @@ class _HomePageState extends State<HomePage> {
       body: SafeArea(
         child: Stack(
           children: [
+            // Background Image
             Positioned.fill(
               child: Image.asset(
                 "assets/agriculture_background.jpg",
@@ -39,12 +39,14 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
+            // Dark overlay
             Positioned.fill(
               child: Container(
                 color: Colors.black.withOpacity(0.3),
               ),
             ),
 
+            // Logo
             Positioned(
               top: 20,
               left: 20,
@@ -55,6 +57,7 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
+            // Admin icon
             Positioned(
               top: 25,
               right: 20,
@@ -69,6 +72,7 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
+            // Centered Title & Buttons
             Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -113,10 +117,9 @@ class _HomePageState extends State<HomePage> {
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (context) => UserNavigationBar()), // ✅ Corrected
+                              MaterialPageRoute(builder: (context) => UserNavigationBar()),
                             );
                           },
-
                         ),
                       ],
                     ),
@@ -124,10 +127,59 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
             ),
+
+            // Footer
+            Positioned(
+              bottom: 10,
+              left: 0,
+              right: 0,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Text(
+                    "Developed by S.M. Abinaya, MCA",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      letterSpacing: 0.5,
+                      shadows: [
+                        Shadow(blurRadius: 4.0, color: Colors.black87, offset: Offset(1, 1)),
+                      ],
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    "Sarah Tucker College (Autonomous)",
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.white70,
+                      fontStyle: FontStyle.italic,
+                      shadows: [
+                        Shadow(blurRadius: 4.0, color: Colors.black54, offset: Offset(1, 1)),
+                      ],
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    "© 2024 AgriConnect. All rights reserved.",
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white60,
+                      shadows: [
+                        Shadow(blurRadius: 4.0, color: Colors.black45, offset: Offset(1, 1)),
+                      ],
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
-      bottomNavigationBar: FooterWidget(), // ✅ Placed correctly at the bottom
     );
   }
 }

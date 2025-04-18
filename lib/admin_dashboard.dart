@@ -49,7 +49,7 @@ class AdminDashboard extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                      builder: (context) => const GenerateReportPage()),
+                      builder: (context) => GenerateReportPage()),
                 ),
           ),
         ],

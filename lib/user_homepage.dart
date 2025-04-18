@@ -1,5 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
+import 'database_helper.dart';
+import 'models/product_model.dart';
+import 'user_login_page.dart';
+import 'wishlist_page.dart';
+import 'cart_page.dart';
+import 'soil_type_page.dart';
+import 'customer_jobs.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'user_registration_page.dart';
+import 'account_settings_page.dart';
 
 class UserHomePage extends StatefulWidget {
   @override
@@ -7,19 +17,126 @@ class UserHomePage extends StatefulWidget {
 }
 
 class _UserHomePageState extends State<UserHomePage> {
+  TextEditingController _searchController = TextEditingController();
+  List<Product> _filteredProducts = [];
+  List<Product> _allFetchedProducts = [];
   final List<String> carouselImages = [
     'assets/carousel1.jpg',
     'assets/carousel2.jpg',
     'assets/carousel3.jpg',
   ];
 
-  final List<Map<String, String>> productList = [
-    {'name': 'Organic Tomatoes', 'image': 'assets/tomato.jpg', 'price': '₹50/kg', 'description': 'Fresh organic tomatoes directly from the farm.'},
-    {'name': 'Fresh Carrots', 'image': 'assets/carrot.jpg', 'price': '₹30/kg', 'description': 'Crisp and sweet carrots perfect for cooking and salads.'},
-    {'name': 'Natural Honey', 'image': 'assets/honey.jpg', 'price': '₹150/jar', 'description': 'Pure natural honey without any preservatives.'},
-  ];
+  late Future<List<Product>> futureProducts;
+  String selectedCategory = 'All';
 
-  void showProductDetails(BuildContext context, Map<String, String> product) {
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLoginStatus();
+    futureProducts = _fetchProducts('All');
+    _searchController.addListener(_onSearchChanged);
+  }
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+
+  void _changeCategory(String category) {
+    print("Selected category: $category");  // Keep this for debug
+    setState(() {
+      selectedCategory = category;
+      futureProducts = _fetchProducts(category); // <-- No toLowerCase
+    });
+  }
+
+  Future<List<Product>> _fetchProducts(String category) async {
+    print("Fetching products for category: $category");
+    List<Map<String, dynamic>> rawProducts;
+
+    if (category == 'All') {
+      rawProducts = await DatabaseHelper.instance.getAllAvailableProducts();
+    } else {
+      rawProducts = await DatabaseHelper.instance.getAvailableProductsByCategory(category);
+    }
+
+    List<Product> fetched = rawProducts.map((map) => Product.fromMap(map)).toList();
+    setState(() {
+      _allFetchedProducts = fetched;
+      _filteredProducts = fetched;
+    });
+
+    return fetched;
+  }
+
+  void _onSearchChanged() {
+    final query = _searchController.text.toLowerCase();
+
+    setState(() {
+      _filteredProducts = _allFetchedProducts
+          .where((product) =>
+      product.name.toLowerCase().contains(query) ||
+          product.description.toLowerCase().contains(query))
+          .toList();
+    });
+
+  }
+
+
+  void _checkLoginStatus() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    int? currentUserId = prefs.getInt('currentUserId');
+
+    if (currentUserId == null || currentUserId == 0) {
+      _showLoginRegisterDialog();
+    }
+  }
+
+  void _showLoginRegisterDialog() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    int currentUserId = prefs.getInt('currentUserId') ?? 0;
+
+    // If the user is logged in, don't show the login/register dialog
+    if (currentUserId != 0) {
+      return; // User is already logged in, exit the function
+    }
+
+    // Otherwise, show the login/register dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text("Welcome to A2C"),
+        content: Text("Please login or register to continue."),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => UserLoginPage()),
+              );
+            },
+            child: Text("Login"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => UserRegistrationPage()),
+              );
+            },
+            child: Text("Register"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void showProductDetails(BuildContext context, Product product) {
     showModalBottomSheet(
       context: context,
       shape: RoundedRectangleBorder(
@@ -28,32 +145,49 @@ class _UserHomePageState extends State<UserHomePage> {
       builder: (context) {
         return Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Text(
-                  product['name']!,
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Text(product.name, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                 ),
-              ),
-              SizedBox(height: 10),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(15),
-                child: Image.asset(product['image']!, height: 200, fit: BoxFit.cover),
-              ),
-              SizedBox(height: 10),
-              Text(product['description']!, style: TextStyle(fontSize: 16)),
-              SizedBox(height: 10),
-              Text(product['price']!, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
-              SizedBox(height: 10),
-              ElevatedButton.icon(
-                onPressed: () {},
-                icon: Icon(Icons.shopping_cart),
-                label: Text("Add to Cart"),
-              ),
-            ],
+                SizedBox(height: 10),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(15),
+                  child: Image.memory(product.image!, height: 200, fit: BoxFit.cover),
+                ),
+                SizedBox(height: 10),
+                Text(product.description, style: TextStyle(fontSize: 16)),
+                SizedBox(height: 10),
+                Text("Price: ₹${product.price}", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
+                SizedBox(height: 10),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    SharedPreferences prefs = await SharedPreferences.getInstance();
+                    int userId = prefs.getInt('currentUserId') ?? 0;
+
+                    Map<String, dynamic> cartItem = {
+                      'name': product.name,
+                      'image': product.image,
+                      'price': product.price,
+                      'quantity': 1,
+                      'userId': userId, // ✅ Associate with user
+                    };
+                    await DatabaseHelper().addToCart(cartItem);
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("${product.name} added to cart!")),
+                    );
+                  },
+
+                  icon: Icon(Icons.shopping_cart),
+                  label: Text("Add to Cart"),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -67,23 +201,55 @@ class _UserHomePageState extends State<UserHomePage> {
         backgroundColor: Colors.green,
         title: Row(
           children: [
-            Image.asset('assets/C.png', height: 40), // Circular Logo
+            Image.asset('assets/C.png', height: 40),
             SizedBox(width: 8),
-            Text("A2C", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)), // App Name
+            Text("A2C", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
           ],
         ),
         actions: [
-          IconButton(icon: Icon(Icons.person), onPressed: () { /* Navigate to Profile */ }),
-          IconButton(icon: Icon(Icons.favorite), onPressed: () { /* Navigate to Wishlist */ }),
-          IconButton(icon: Icon(Icons.shopping_cart), onPressed: () { /* Navigate to Cart */ }),
-          IconButton(icon: Icon(Icons.delivery_dining), onPressed: () { /* Navigate to Delivery Tracking */ }),
+          IconButton(
+            icon: Icon(Icons.person),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => AccountSettingsPage()),
+              );
+            },
+          ),
+
+          IconButton(
+            icon: Icon(Icons.favorite),
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (context) => WishlistPage()));
+            },
+          ),
+          IconButton(
+            icon: Icon(Icons.shopping_cart),
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (context) => CartPage()));
+            },
+          ),
+          IconButton(
+            icon: Icon(Icons.logout),
+            onPressed: () async {
+              // Clear SharedPreferences to log out the user
+              SharedPreferences prefs = await SharedPreferences.getInstance();
+              await prefs.clear(); // This clears all saved data
+
+              // Navigate back to the login screen
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => UserLoginPage()),
+              );
+            },
+          ),
+
         ],
       ),
-
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // Search Bar with Filter Icon
+            // Search Bar
             Padding(
               padding: const EdgeInsets.all(8.0),
               child: Row(
@@ -100,17 +266,12 @@ class _UserHomePageState extends State<UserHomePage> {
                           Icon(Icons.search, color: Colors.grey),
                           Expanded(
                             child: TextField(
+                              controller: _searchController,
                               decoration: InputDecoration(
                                 hintText: 'Search products...',
                                 border: InputBorder.none,
                               ),
                             ),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.filter_list),
-                            onPressed: () {
-                              // Add filter functionality
-                            },
                           ),
                         ],
                       ),
@@ -119,7 +280,7 @@ class _UserHomePageState extends State<UserHomePage> {
                 ],
               ),
             ),
-            // Carousel Slider
+            // Carousel
             CarouselSlider(
               options: CarouselOptions(
                 height: 200,
@@ -133,53 +294,68 @@ class _UserHomePageState extends State<UserHomePage> {
                 );
               }).toList(),
             ),
+            // Buttons
             Padding(
               padding: EdgeInsets.all(10),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
-                    child: Container(
+                    child: Ink(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(colors: [Colors.green, Colors.lightGreen]),
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent, // Replaces 'primary'
-                          shadowColor: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () {
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => SoilTypePage()));
+                        },
+                        child: Container(
                           padding: EdgeInsets.symmetric(vertical: 15),
+                          alignment: Alignment.center,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.landscape, color: Colors.white),
+                              SizedBox(width: 8),
+                              Text("Soil Type", style: TextStyle(color: Colors.white, fontSize: 16)),
+                            ],
+                          ),
                         ),
-                        onPressed: () {},
-                        icon: Icon(Icons.local_hospital),
-                        label: Text("Crop Doctor"),
                       ),
                     ),
                   ),
                   SizedBox(width: 10),
                   Expanded(
-                    child: Container(
+                    child: Ink(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(colors: [Colors.orange, Colors.deepOrange]),
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent, // Replaces 'primary'
-                          shadowColor: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () {
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => CustomerJobsPage()));
+                        },
+                        child: Container(
                           padding: EdgeInsets.symmetric(vertical: 15),
+                          alignment: Alignment.center,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.work, color: Colors.white),
+                              SizedBox(width: 8),
+                              Text("Jobs", style: TextStyle(color: Colors.white, fontSize: 16)),
+                            ],
+                          ),
                         ),
-                        onPressed: () {},
-                        icon: Icon(Icons.work),
-                        label: Text("Jobs"),
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-
-
+            // Categories
             Padding(
               padding: EdgeInsets.all(10),
               child: Row(
@@ -190,66 +366,149 @@ class _UserHomePageState extends State<UserHomePage> {
                 ],
               ),
             ),
-            // Categories List
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  CategoryItem(icon: Icons.agriculture, label: "Crops"),
-                  CategoryItem(icon: Icons.grass, label: "Fertilizers"),
-                  CategoryItem(icon: Icons.local_florist, label: "Seeds"),
+                  CategoryItem(
+                    icon: Icons.eco,
+                    label: "All",
+                    isSelected: selectedCategory == 'All',
+                    onTap: () => _changeCategory('All'),
+                  ),
+                  CategoryItem(
+                    icon: Icons.agriculture,
+                    label: "Crop", // ✅ singular
+                    isSelected: selectedCategory == 'Crop',
+                    onTap: () => _changeCategory('Crop'),
+                  ),
+                  CategoryItem(
+                    icon: Icons.grass,
+                    label: "Fertilizer", // ✅ singular
+                    isSelected: selectedCategory == 'Fertilizer',
+                    onTap: () => _changeCategory('Fertilizer'),
+                  ),
+                  CategoryItem(
+                    icon: Icons.local_florist,
+                    label: "Seed", // ✅ singular
+                    isSelected: selectedCategory == 'Seed',
+                    onTap: () => _changeCategory('Seed'),
+                  ),
                 ],
               ),
             ),
+
+            // Products
             Padding(
               padding: EdgeInsets.all(10),
               child: Text("All Products", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             ),
-            // Product List
-            Padding(
-              padding: EdgeInsets.symmetric(vertical: 10, horizontal: 5),
-              child: GridView.builder(
-                physics: NeverScrollableScrollPhysics(),
-                shrinkWrap: true,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  childAspectRatio: 0.7,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                ),
-                itemCount: productList.length,
-                itemBuilder: (context, index) {
-                  var product = productList[index];
-                  return GestureDetector(
-                    onTap: () => showProductDetails(context, product),
-                    child: Card(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                      elevation: 5,
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(15),
-                              child: Image.asset(product['image']!, fit: BoxFit.cover, width: double.infinity),
+            FutureBuilder<List<Product>>(
+              future: futureProducts,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Center(child: CircularProgressIndicator());
+                } else if (snapshot.hasError) {
+                  return Center(child: Text("Error loading products"));
+                } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return Center(child: Text("No available products"));
+                }
+
+                List<Product> products = _searchController.text.isEmpty ? snapshot.data! : _filteredProducts;
+                return GridView.builder(
+                  physics: NeverScrollableScrollPhysics(),
+                  shrinkWrap: true,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    childAspectRatio: 0.75,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                  ),
+                  itemCount: products.length,
+                  itemBuilder: (context, index) {
+                    var product = products[index];
+                    return GestureDetector(
+                      onTap: () => showProductDetails(context, product),
+                      child: Card(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        elevation: 5,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
+                                child: Image.memory(
+                                  product.image!,
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                ),
+                              ),
                             ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(product['name']!, style: TextStyle(fontWeight: FontWeight.bold)),
-                                Text(product['price']!, style: TextStyle(color: Colors.green)),
-                              ],
+                            Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(product.name, style: TextStyle(fontWeight: FontWeight.bold)),
+                                  Text("₹${product.price}", style: TextStyle(color: Colors.green)),
+                                  if (product.category.isNotEmpty)
+                                    Text("Category: ${product.category}", style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                                  if (product.description.isNotEmpty)
+                                    Text("Desc: ${product.description}", maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12)),
+                                  SizedBox(height: 5),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                    children: [
+                                      IconButton(
+                                        icon: Icon(Icons.favorite_border, color: Colors.red),
+                                        onPressed: () async {
+                                          await DatabaseHelper().addToWishlist(
+                                            product.name,
+                                            product.image!,
+                                            product.price.toString(),
+                                          );
+
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text("${product.name} added to wishlist!")),
+                                          );
+                                        },
+
+                                      ),
+                                      IconButton(
+                                        icon: Icon(Icons.shopping_cart, color: Colors.green),
+                                        onPressed: () async {
+                                          SharedPreferences prefs = await SharedPreferences.getInstance();
+                                          int userId = prefs.getInt('currentUserId') ?? 0;
+
+                                          Map<String, dynamic> cartItem = {
+                                            'name': product.name,
+                                            'image': product.image,
+                                            'price': product.price,
+                                            'quantity': 1,
+                                            'userId': userId, // ✅ Associate with user
+                                          };
+                                          await DatabaseHelper().addToCart(cartItem);
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text("${product.name} added to cart!")),
+                                          );
+                                        },
+
+                                      ),
+
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  );
-                },
-              ),
-            ),
+                    );
+                  },
+                );
+              },
+            )
           ],
         ),
       ),
@@ -257,23 +516,40 @@ class _UserHomePageState extends State<UserHomePage> {
   }
 }
 
-// Category Widget
 class CategoryItem extends StatelessWidget {
   final IconData icon;
   final String label;
+  final VoidCallback onTap;
+  final bool isSelected;
 
-  CategoryItem({required this.icon, required this.label});
+  CategoryItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.isSelected = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 10),
-      child: Column(
-        children: [
-          CircleAvatar(radius: 30, backgroundColor: Colors.green, child: Icon(icon, color: Colors.white)),
-          SizedBox(height: 5),
-          Text(label, style: TextStyle(fontWeight: FontWeight.bold)),
-        ],
+      child: GestureDetector(
+        onTap: onTap,
+        child: Column(
+          children: [
+            CircleAvatar(
+              radius: 30,
+              backgroundColor: isSelected ? Colors.orange : Colors.green,
+              child: Icon(icon, color: Colors.white),
+            ),
+            SizedBox(height: 5),
+            Text(label,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isSelected ? Colors.orange : Colors.black,
+                )),
+          ],
+        ),
       ),
     );
   }

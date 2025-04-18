@@ -1,21 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_core/firebase_core.dart'; // Import Firebase
-import 'firebase_options.dart'; // Auto-generated Firebase config
 import 'splash_screen.dart';
 import 'weather_provider.dart';
+import 'database_helper.dart'; // Import Database Helper
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();  // Required for async operations
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await DatabaseHelper.instance.database;
+    await _addAdminCredentials();
 
-  // ✅ Initialize Firebase
- // await Firebase.initializeApp(
-  //  options: DefaultFirebaseOptions.currentPlatform,
-  //);
+    print("🚀 All systems initialized successfully!");
+    runApp(const MyApp());
+  } catch (e, stackTrace) {
+    print("❌ Initialization Error: $e");
+    print("🔍 Stack Trace: $stackTrace");
+  }
+}
 
-  //print("📌 Firebase Initialized Successfully!");
 
-  runApp(const MyApp());
+// ✅ Insert Admin Credentials (Runs Once)
+Future<void> _addAdminCredentials() async {
+  const String adminEmail = "admin@gmail.com";
+  const String adminPassword = "admin123";
+
+  bool adminExists = await DatabaseHelper.instance.doesAdminExist(adminEmail);
+  if (!adminExists) {
+    await DatabaseHelper.instance.insertAdmin(adminEmail, adminPassword);
+    print("✅ Admin account added: $adminEmail");
+  } else {
+    print("ℹ️ Admin already exists in the database.");
+  }
 }
 
 class MyApp extends StatelessWidget {

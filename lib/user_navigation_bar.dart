@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'user_homepage.dart';
 import 'jobs_page.dart';
-import 'request_page.dart';
-import 'disease_identification_page.dart';
+import 'customer_jobs.dart';
+import 'soil_type_page.dart';
 import 'dashboard_page.dart';
 
 class UserNavigationBar extends StatefulWidget {
@@ -15,8 +15,8 @@ class _UserNavigationBarState extends State<UserNavigationBar> {
   final List<Widget> _pages = [
     UserHomePage(),
     JobsPage(),
-    RequestPage(),
-    DiseaseIdentificationPage(),
+    CustomerJobsPage(),
+    SoilTypePage(),
     DashboardPage(),
   ];
 
@@ -40,7 +40,7 @@ class _UserNavigationBarState extends State<UserNavigationBar> {
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
           BottomNavigationBarItem(icon: Icon(Icons.work), label: "Jobs"),
           BottomNavigationBarItem(icon: Icon(Icons.add_circle, size: 30), label: "Request"),
-          BottomNavigationBarItem(icon: Icon(Icons.camera_alt), label: "Disease"),
+          BottomNavigationBarItem(icon: Icon(Icons.landscape), label: "SoilType"),
           BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: "Dashboard"),
         ],
       ),

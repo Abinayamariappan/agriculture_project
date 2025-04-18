@@ -1,6 +1,7 @@
 import 'dart:ui'; // Required for BackdropFilter
 import 'package:flutter/material.dart';
 import 'admin_dashboard.dart'; // Ensure Admin Dashboard Exists
+import 'database_helper.dart';
 
 class AdminLoginPage extends StatefulWidget {
   const AdminLoginPage({super.key});
@@ -15,7 +16,6 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
   bool _isLoading = false;
   bool _obscurePassword = true; // For password visibility toggle
 
-  // ✅ Dummy Login Function (Replace with Firebase/Database Logic)
   void _loginAdmin() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -28,9 +28,12 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
       _isLoading = true;
     });
 
-    await Future.delayed(const Duration(seconds: 2)); // Simulate API delay
+    bool isAuthenticated = await DatabaseHelper.instance.authenticateAdmin(
+      _emailController.text,
+      _passwordController.text,
+    );
 
-    if (_emailController.text == "admin@gmail.com" && _passwordController.text == "admin123") {
+    if (isAuthenticated) {
       if (mounted) {
         Navigator.pushReplacement(
           context,

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
 import 'database_helper.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'farmer_sales_page.dart';
 
 class SeedsPage extends StatefulWidget {
   @override
@@ -17,43 +20,80 @@ class _SeedsPageState extends State<SeedsPage> {
 
   File? _image;
   String _imageStatus = "No Image Uploaded";
-  int? _farmerId; // To store fetched farmer ID
+  int? _farmerId;
 
   @override
   void initState() {
     super.initState();
-    _fetchFarmerId(); // Fetch farmer ID when page loads
+    _loadFarmerId();
   }
 
-  Future<void> _fetchFarmerId() async {
-    String? phoneNumber = await DatabaseHelper.instance.getLoggedInUserPhone();
-    if (phoneNumber == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No logged-in user found!')),
-      );
-      return;
-    }
+  Future<void> _loadFarmerId() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _farmerId = prefs.getInt('farmerId');
+    });
+  }
 
-    Map<String, dynamic>? farmerData = await DatabaseHelper.instance.getFarmerByPhone(phoneNumber);
-    if (farmerData != null && farmerData.containsKey('id')) {
-      setState(() {
-        _farmerId = farmerData['id'] as int;
-      });
-    } else {
+  Future<File?> _compressImage(File imageFile) async {
+    final bytes = await imageFile.readAsBytes();
+    final img.Image? image = img.decodeImage(bytes);
+    if (image == null) return null;
+
+    final compressedImage = img.encodeJpg(image, quality: 70);
+    final newFile = File(imageFile.path)..writeAsBytesSync(compressedImage);
+    return newFile;
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
+      if (pickedFile != null) {
+        File? compressedImage = await _compressImage(File(pickedFile.path));
+        setState(() {
+          _image = compressedImage;
+          _imageStatus = "Image Uploaded ✅";
+        });
+      }
+    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Farmer ID not found!')),
+        SnackBar(content: Text('Failed to pick image: ${e.toString()}')),
       );
     }
   }
+  Future<int?> getLoggedInFarmerId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('farmer_id');  // Replace with the actual key you're using to store the farmer ID
+  }
 
-  void _addSeed() async {
-    if (_farmerId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Farmer ID not available!')),
-      );
-      return;
-    }
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          title: const Text("Success ✅"),
+          content: const Text("Seed added successfully!"),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Close the dialog
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => FarmerSalesPage(farmerId: _farmerId),
+                  ),
+                );
+              },
+              child: const Text("Go to Sales"),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
+  void _submitSeed() async {
     if (_nameController.text.isEmpty ||
         _priceController.text.isEmpty ||
         _minOrderController.text.isEmpty ||
@@ -61,64 +101,47 @@ class _SeedsPageState extends State<SeedsPage> {
         _descriptionController.text.isEmpty ||
         _image == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all fields and upload an image')),
+        const SnackBar(content: Text('Please enter all fields and select an image')),
+      );
+      return;
+    }
+
+    if (_farmerId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to get farmer ID')),
       );
       return;
     }
 
     try {
-      double price = double.parse(_priceController.text);
-      double minOrder = double.parse(_minOrderController.text);
-      double availableQty = double.parse(_availableQtyController.text);
+      final name = _nameController.text;
+      final price = double.tryParse(_priceController.text) ?? 0.0;
+      final minKg = double.tryParse(_minOrderController.text) ?? 0.0;
+      final totalKg = double.tryParse(_availableQtyController.text) ?? 0.0;
+      final description = _descriptionController.text;
+      final imageBytes = await _image!.readAsBytes();
+      final status = "Available";
 
-      await DatabaseHelper.instance.insertProduct(
-        farmerId: _farmerId!,
-        name: _nameController.text,
-        category: 'Seeds',
+      await DatabaseHelper.instance.insertSeed(
+        name: name,
         price: price,
-        minKg: minOrder,
-        totalKg: availableQty,
-        status: 'Available',
-        image: _image?.path ?? '',
-        description: _descriptionController.text,
+        minKg: minKg,
+        totalKg: totalKg,
+        description: description,
+        image: imageBytes,
+        status: status,
+        farmerId: _farmerId!,
       );
 
       _clearFields();
-
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Success'),
-          content: const Text('Seed added successfully!'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
+      _showSuccessDialog(); // Call your styled success dialog
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter valid numeric values')),
+        SnackBar(content: Text('Error: $e')),
       );
     }
   }
 
-  Future<void> _pickImage() async {
-    final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
-
-    if (pickedFile != null) {
-      setState(() {
-        _image = File(pickedFile.path);
-        _imageStatus = "Image Uploaded";
-      });
-    } else {
-      setState(() {
-        _imageStatus = "No Image Selected";
-      });
-    }
-  }
 
 
   void _clearFields() {
@@ -201,7 +224,7 @@ class _SeedsPageState extends State<SeedsPage> {
                     _buildTextField(_descriptionController, 'Seed Description', Icons.description),
                     const SizedBox(height: 15),
                     ElevatedButton(
-                      onPressed: _addSeed,
+                      onPressed: _submitSeed,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green,
                         padding: const EdgeInsets.all(15),

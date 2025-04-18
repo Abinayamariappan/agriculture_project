@@ -1,7 +1,8 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'database_helper.dart';
-import 'farmer_dashboard.dart';
+import 'farmer_login.dart';
+
 
 class OTPVerification extends StatefulWidget {
   final String name;
@@ -19,9 +20,19 @@ class _OTPVerificationState extends State<OTPVerification> {
 
   // ✅ Simulate OTP Verification (Replace with real OTP API)
   Future<void> _verifyOTP() async {
-    if (otpController.text.trim().isEmpty) {
+    String otpInput = otpController.text.trim();
+
+    // ✅ Basic Validation
+    if (otpInput.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter the OTP')),
+      );
+      return;
+    }
+
+    if (!RegExp(r'^\d{4,6}$').hasMatch(otpInput)) {  // Ensures OTP is numeric & has 4-6 digits
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid OTP format! Enter a valid 4-6 digit OTP.')),
       );
       return;
     }
@@ -30,38 +41,62 @@ class _OTPVerificationState extends State<OTPVerification> {
       isLoading = true;
     });
 
-    // Simulated OTP Verification (Replace with actual API call)
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      // ✅ Simulated OTP Verification (Replace with actual API call)
+      await Future.delayed(const Duration(seconds: 2));
 
-    if (otpController.text == "1234") {
-      int farmerId = await DatabaseHelper.instance.registerFarmer(
-        name: widget.name,
-        phone: widget.phone,
-      );
+      if (otpInput == "1234") {  // Replace with actual OTP validation logic
 
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => FarmerDashboard(
-              farmerId: farmerId.toString(),  // ✅ Now defined!
-              name: widget.name,
-              phone: widget.phone,
+        // ✅ Check if Farmer Already Exists (Avoid Duplicate Registration)
+        final existingFarmer = await DatabaseHelper.instance.getFarmerByPhone(widget.phone);
+        if (existingFarmer != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Phone number already registered. Please log in.')),
+          );
+          // ✅ Navigate to login screen
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => FarmerLogin(),
             ),
-          ),
+          );
+          return;
+        }
+
+        // ✅ Register Farmer
+        int farmerId = await DatabaseHelper.instance.registerFarmer(
+          name: widget.name,
+          phone: widget.phone,
+        );
+
+        // ✅ Navigate to Farmer Dashboard
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => FarmerLogin(), // ✅ Replace with your actual FarmerLogin widget
+            ),
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid OTP! Please try again.')),
         );
       }
-    } else {
+    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid OTP! Please try again.')),
+        SnackBar(content: Text('Error verifying OTP: $e')),
       );
+    } finally {
+      // ✅ Ensure Loading State is Reset in All Cases
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
-
-
-    setState(() {
-      isLoading = false;
-    });
   }
+
 
   @override
   Widget build(BuildContext context) {

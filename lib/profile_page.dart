@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'database_helper.dart';
 
 class ProfilePage extends StatefulWidget {
   final String farmerId;
@@ -40,22 +41,29 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   /// Save Address in SharedPreferences
+  /// Save Address in SQLite
   Future<void> _saveAddress() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('address_${widget.farmerId}', _addressController.text);
+    await DatabaseHelper.instance.updateFarmerAddress(
+      int.parse(widget.farmerId),  // Convert ID to integer
+      _addressController.text,
+    );
   }
 
-  /// Pick an Image from Gallery & Save Path
+  /// Pick an Image from Gallery & Save Path in SQLite
   Future<void> _pickImage() async {
     final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
       setState(() {
         _profileImage = File(pickedFile.path);
       });
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.setString('profileImage_${widget.farmerId}', pickedFile.path);
+
+      await DatabaseHelper.instance.updateProfileImage(
+        int.parse(widget.farmerId),  // Convert ID to integer
+        pickedFile.path,
+      );
     }
   }
+
 
   /// Build Profile Picture (From File or Default Avatar)
   Widget _buildProfilePicture() {

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'dart:ui';
 import 'package:image_picker/image_picker.dart';
-import 'database_helper.dart'; // ✅ Import SQLite Database Helper
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image/image.dart' as img;
+import 'database_helper.dart';
+import 'farming_jobs_page.dart';
 
 class ManageFarmlandPage extends StatefulWidget {
-  final String farmerId; // ✅ Pass Farmer ID as String
-
-  ManageFarmlandPage({required this.farmerId});
-
   @override
   _ManageFarmlandPageState createState() => _ManageFarmlandPageState();
 }
@@ -16,81 +16,143 @@ class _ManageFarmlandPageState extends State<ManageFarmlandPage> {
   final TextEditingController _farmNameController = TextEditingController();
   final TextEditingController _farmSizeController = TextEditingController();
   final TextEditingController _farmLocationController = TextEditingController();
+  final TextEditingController _wagesController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
-  File? _selectedImage;
-  String _imageStatus = "No Image Uploaded";
 
-  // ✅ Pick Image from Gallery
-  Future<void> _pickImage() async {
-    final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      setState(() {
-        _selectedImage = File(pickedFile.path);
-        _imageStatus = "Image Uploaded ✅";
-      });
+  File? _image;
+  String _imageStatus = "No Image Uploaded";
+  int? _farmerId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFarmerId();
+  }
+
+  Future<void> _loadFarmerId() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _farmerId = prefs.getInt('farmerId');
+    });
+  }
+
+  Future<File?> _compressImage(File imageFile) async {
+    final bytes = await imageFile.readAsBytes();
+    final img.Image? image = img.decodeImage(bytes);
+    if (image == null) return null;
+
+    final compressedImage = img.encodeJpg(image, quality: 70);
+    final newFile = File(imageFile.path)..writeAsBytesSync(compressedImage);
+    return newFile;
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final pickedFile = await ImagePicker().pickImage(source: source);
+      if (pickedFile != null) {
+        File? compressedImage = await _compressImage(File(pickedFile.path));
+        setState(() {
+          _image = compressedImage;
+          _imageStatus = "Image Uploaded ✅";
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to pick image: ${e.toString()}')),
+      );
     }
   }
 
-  // ✅ Show Success Alert
-  void _showSuccessDialog() {
-    showDialog(
+  void _showImagePickerModal() {
+    showModalBottomSheet(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-          title: const Text("Success ✅"),
-          content: const Text("Farmland request added successfully!"),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: Icon(Icons.camera_alt),
+              title: Text("Take Photo"),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.photo_library),
+              title: Text("Choose from Gallery"),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
 
-  // ✅ Submit Farmland Request
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: Text("Success ✅"),
+        content: Text("Farmland request added successfully!"),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => FarmingJobsPage(farmerId: _farmerId)),
+              );
+            },
+            child: Text("Go to Jobs"),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _submitRequest() async {
-    if (_farmNameController.text.isEmpty ||
-        _farmSizeController.text.isEmpty ||
-        _farmLocationController.text.isEmpty ||
-        _descriptionController.text.isEmpty ||
-        _selectedImage == null) {
+    if (_farmNameController.text.trim().isEmpty ||
+        _farmSizeController.text.trim().isEmpty ||
+        _farmLocationController.text.trim().isEmpty ||
+        _descriptionController.text.trim().isEmpty ||
+        _wagesController.text.trim().isEmpty ||
+        _image == null ||
+        _farmerId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter all fields and select an image')),
+        const SnackBar(content: Text('Please fill all fields and upload an image')),
       );
       return;
     }
 
     try {
-      // ✅ Convert `farmerId` to `int`
-      int farmerId = int.parse(widget.farmerId);
+      double? farmSize = double.tryParse(_farmSizeController.text.trim());
+      double? wages = double.tryParse(_wagesController.text.trim());
 
-      // ✅ Save to Database
+      if (farmSize == null || wages == null || farmSize <= 0 || wages <= 0) {
+        throw FormatException("Invalid number format");
+      }
+
+      final imageBytes = await _image!.readAsBytes();
+
       await DatabaseHelper.instance.insertFarmland(
-        farmerId: farmerId, // ✅ Now passing `int`
-        name: _farmNameController.text,
-        size: double.parse(_farmSizeController.text), // ✅ Convert to `double`
-        location: _farmLocationController.text, // ✅ Store farm location
-        description: _descriptionController.text,
-        image: _selectedImage!.path,
+        farmerId: _farmerId!,
+        name: _farmNameController.text.trim(),
+        size: farmSize,
+        location: _farmLocationController.text.trim(),
+        description: _descriptionController.text.trim(),
+        wages: wages,
+        image: imageBytes,
         status: 'Worker Requested',
       );
 
-      // ✅ Show Success Alert
       _showSuccessDialog();
-
-      // ✅ Clear Fields
-      _farmNameController.clear();
-      _farmSizeController.clear();
-      _farmLocationController.clear();
-      _descriptionController.clear();
-      setState(() {
-        _selectedImage = null;
-        _imageStatus = "No Image Uploaded";
-      });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
+        SnackBar(content: Text("Error: ${e.toString()}")),
       );
     }
   }
@@ -98,87 +160,93 @@ class _ManageFarmlandPageState extends State<ManageFarmlandPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Request Farmland Workers'), backgroundColor: Colors.blue),
       body: Stack(
         children: [
-          // ✅ Background Image
-          Positioned.fill(
-            child: Image.asset('assets/farm_bg.jpg', fit: BoxFit.cover),
+          // Background image with blur
+          Container(
+            decoration: BoxDecoration(
+              image: DecorationImage(
+                image: AssetImage('assets/farm_bg.jpg'),
+                fit: BoxFit.cover,
+              ),
+            ),
           ),
-
-          // ✅ Blurred Overlay for Readability
-          Positioned.fill(
+          BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
             child: Container(color: Colors.black.withOpacity(0.3)),
           ),
-
-          Center(
+          // Content
+          SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(15),
-              child: Container(
-                width: MediaQuery.of(context).size.width * 0.9,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: Colors.white.withOpacity(0.5)),
-                  boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 15, spreadRadius: 3)],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // ✅ Image Upload
-                    GestureDetector(
-                      onTap: _pickImage,
-                      child: Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.white.withOpacity(0.8)),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: _selectedImage != null
-                              ? Image.file(_selectedImage!, fit: BoxFit.cover)
-                              : const Icon(Icons.image, size: 50, color: Colors.white),
+              padding: const EdgeInsets.all(20),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.4), // More transparent
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white.withOpacity(0.3)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 15,
+                        offset: Offset(0, 6),
+                      ),
+                    ],
+                  ),
+
+                  child: Column(
+                    children: [
+                      const Text(
+                        "Request Farmland Workers",
+                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 20),
+                      GestureDetector(
+                        onTap: _showImagePickerModal,
+                        child: Container(
+                          width: 120,
+                          height: 120,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.grey),
+                          ),
+                          child: _image != null
+                              ? ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Image.file(_image!, fit: BoxFit.cover),
+                          )
+                              : Icon(Icons.add_a_photo, size: 50),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-
-                    // ✅ Image Upload Status
-                    Text(
-                      _imageStatus,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: _selectedImage != null ? Colors.green : Colors.red,
+                      const SizedBox(height: 10),
+                      Text(
+                        _imageStatus,
+                        style: TextStyle(
+                          color: _image != null ? Colors.green : Colors.red,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-
-                    // ✅ Input Fields
-                    _buildTextField(_farmNameController, 'Farmland Name', Icons.eco),
-                    _buildTextField(_farmSizeController, 'Size (in acres)', Icons.landscape, isNumeric: true),
-                    _buildTextField(_farmLocationController, 'Location', Icons.location_on),
-                    _buildTextField(_descriptionController, 'Description', Icons.description),
-
-                    const SizedBox(height: 15),
-
-                    // ✅ Submit Button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
+                      const SizedBox(height: 20),
+                      _buildTextField(_farmNameController, 'Farmland Name'),
+                      _buildTextField(_farmSizeController, 'Size (acres)', isNumeric: true),
+                      _buildTextField(_farmLocationController, 'Location'),
+                      _buildTextField(_wagesController, 'Wages (per day)', isNumeric: true),
+                      _buildTextField(_descriptionController, 'Description'),
+                      const SizedBox(height: 20),
+                      ElevatedButton(
                         onPressed: _submitRequest,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.blue,
-                          padding: const EdgeInsets.symmetric(vertical: 15),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
-                        child: const Text("Request Worker", style: TextStyle(fontSize: 18, color: Colors.white)),
+                        child: const Text("Submit Request"),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -188,8 +256,8 @@ class _ManageFarmlandPageState extends State<ManageFarmlandPage> {
     );
   }
 
-  // ✅ Reusable Text Field Widget
-  Widget _buildTextField(TextEditingController controller, String label, IconData icon, {bool isNumeric = false}) {
+  Widget _buildTextField(TextEditingController controller, String label,
+      {bool isNumeric = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: TextField(
@@ -197,13 +265,10 @@ class _ManageFarmlandPageState extends State<ManageFarmlandPage> {
         keyboardType: isNumeric ? TextInputType.number : TextInputType.text,
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: const TextStyle(color: Colors.white),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          prefixIcon: Icon(icon, color: Colors.white),
           filled: true,
-          fillColor: Colors.black.withOpacity(0.4),
+          fillColor: Colors.white.withOpacity(0.6), // Slightly transparent fill
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         ),
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
       ),
     );
   }

@@ -12,13 +12,16 @@ import 'drip_irrigation_page.dart';
 import 'manage_farmland_page.dart';
 import 'farmer_sales_page.dart';
 import 'farming_jobs_page.dart';
-import 'plant_disease_page.dart';
 import 'soil_type_page.dart';
 import 'govt_schemes_page.dart';
 import 'profile_page.dart';
 import 'farmer_login.dart';
 import 'package:geocoding/geocoding.dart';
 import 'report_page.dart';
+import 'customer_jobs_requests_page.dart';
+import 'package:sqflite/sqflite.dart';
+import 'farmer_expert_page.dart';
+
 
 
 class FarmerDashboard extends StatefulWidget {
@@ -41,6 +44,9 @@ class _FarmerDashboardState extends State<FarmerDashboard> with SingleTickerProv
   late AnimationController _controller;
   late Animation<double> _fadeInAnimation;
   String currentLocation = "Fetching location...";
+  int pendingJobCount = 0;
+  int? currentFarmerId;
+
 
   @override
   void initState() {
@@ -53,7 +59,44 @@ class _FarmerDashboardState extends State<FarmerDashboard> with SingleTickerProv
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
     _controller.forward();
-    _getCurrentLocation();// Automatically fetch location
+    _getCurrentLocation();
+    _fetchPendingJobCount(); // Fetch job requests
+    _loadFarmerId();
+  }
+
+  void _loadFarmerId() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      currentFarmerId = prefs.getInt('farmerId');
+    });
+  }
+
+  void _updatePendingJobCount() async {
+    final db = await openDatabase('farmers.db'); // Ensure this matches your DB setup
+
+    final List<Map<String, dynamic>> pendingJobs = await db.query(
+      'customer_jobs',
+      where: 'status = ?',
+      whereArgs: ['Pending'],
+    );
+
+    setState(() {
+      pendingJobCount = pendingJobs.length;
+    });
+  }
+
+
+  Future<void> _fetchPendingJobCount() async {
+    final db = await openDatabase('farmers.db'); // Ensure correct DB path
+    final List<Map<String, dynamic>> jobs = await db.query(
+      'customer_jobs',
+      where: 'status = ?',
+      whereArgs: ['Pending'], // Only count pending jobs
+    );
+
+    setState(() {
+      pendingJobCount = jobs.length; // Update badge count
+    });
   }
 
   Future<void> _getCurrentLocation() async {
@@ -123,7 +166,7 @@ class _FarmerDashboardState extends State<FarmerDashboard> with SingleTickerProv
 
   Future<void> _logout() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('loggedInFarmerPhone'); // Clear stored farmer phone
+    await prefs.clear(); // Clears session data but NOT the database
 
     if (mounted) {
       Navigator.pushReplacement(
@@ -344,6 +387,51 @@ class _FarmerDashboardState extends State<FarmerDashboard> with SingleTickerProv
               );
             },
           ),
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.work_outline, color: Colors.white),
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => CustomerJobsRequestsPage(
+                        updatePendingJobCount: _updatePendingJobCount,
+                      ),
+                    ),
+                  );
+                  _updatePendingJobCount(); // Refresh the pending job count after returning
+                },
+              ),
+
+              if (pendingJobCount > 0) // Show badge if jobs exist
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 20,
+                      minHeight: 20,
+                    ),
+                    child: Text(
+                      '$pendingJobCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: _logout,
@@ -380,18 +468,20 @@ class _FarmerDashboardState extends State<FarmerDashboard> with SingleTickerProv
                     crossAxisSpacing: 15,
                     mainAxisSpacing: 15,
                     children: [
+                      //_buildDashboardButton("Farmer Product", Colors.lightGreen, Icons.shopping_bag, const FarmerProductPage(),),
                         _buildDashboardButton("Crop Details", Colors.green, Icons.agriculture, CropDetailsPage()),
                         _buildDashboardButton("Fertilizers", Colors.orange, Icons.science, FertilizerPage()),
                         _buildDashboardButton("Seeds", Colors.blue, Icons.grass, SeedsPage()),
                         _buildDashboardButton("Pesticides", Colors.red, Icons.bug_report, PesticidePage()),
                         _buildDashboardButton("Drip Irrigation", Colors.purple, Icons.water_drop, DripIrrigationPage()),
-                        _buildDashboardButton("Manage Farmland", Colors.brown, Icons.landscape, ManageFarmlandPage(farmerId: widget.farmerId)),
-                        _buildDashboardButton("Farmer Sales", Colors.teal, Icons.store, FarmerSalesPage(farmerId: widget.farmerId)),
-                        _buildDashboardButton("Farming Jobs", Colors.deepOrange, Icons.work, FarmingJobsPage()),
-                        _buildDashboardButton("Plant Disease", Colors.cyan, Icons.local_florist, PlantDiseasePage()),
+                        _buildDashboardButton("Manage Farmland", Colors.brown, Icons.landscape, ManageFarmlandPage()),
+                        _buildDashboardButton("Farmer Sales", Colors.teal, Icons.store, FarmerSalesPage(farmerId: currentFarmerId)),
+                        _buildDashboardButton("Farming Jobs", Colors.deepOrange, Icons.work, FarmingJobsPage(farmerId: currentFarmerId)),
                         _buildDashboardButton("Soil Type", Colors.indigo, Icons.terrain, SoilTypePage()),
                         _buildDashboardButton("Government Schemes", Colors.green, Icons.account_balance, GovtSchemesPage()),
-                        _buildDashboardButton("Report", Colors.red, Icons.report, ReportPage()), // Added Report button
+                        _buildDashboardButton("Expert Support", Colors.blue, Icons.support_agent, FarmerExpertPage()),
+                        _buildDashboardButton("Report", Colors.red, Icons.report, ReportPage()),
+
                     ],
                   ),
                 ),

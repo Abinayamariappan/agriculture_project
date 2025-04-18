@@ -15,8 +15,10 @@ class ReportPage extends StatefulWidget {
 
 class _ReportPageState extends State<ReportPage> {
   DateTime selectedDate = DateTime.now();
-  List<Map<String, dynamic>> salesData = [];
-  List<Map<String, dynamic>> jobData = [];
+  List<Map<String, dynamic>> orderSummaryData = [];
+
+  int totalOrders = 0;
+  double totalAmount = 0.0;
 
   @override
   void initState() {
@@ -24,27 +26,31 @@ class _ReportPageState extends State<ReportPage> {
     fetchReport();
   }
 
+  Future<List<Map<String, dynamic>>> fetchOrderSummary(String date) async {
+    final database = openDatabase(join(await getDatabasesPath(), 'agricult.db'));
+    final db = await database;
+
+    return await db.rawQuery('''
+      SELECT 
+        payment_method,
+        order_status,
+        COUNT(*) AS total_orders,
+        SUM(total_amount) AS total_amount
+      FROM orders
+      WHERE DATE(datetime(created_at / 1000, 'unixepoch')) = ?
+      GROUP BY payment_method, order_status
+    ''', [date]);
+  }
+
   Future<void> fetchReport() async {
     String formattedDate = DateFormat('yyyy-MM-dd').format(selectedDate);
-    salesData = await fetchSalesReport(formattedDate);
-    jobData = await fetchJobReport(formattedDate);
+    orderSummaryData = await fetchOrderSummary(formattedDate);
+
+    // Calculate totals
+    totalOrders = orderSummaryData.fold(0, (sum, item) => sum + (item['total_orders'] as int));
+    totalAmount = orderSummaryData.fold(0.0, (sum, item) => sum + (item['total_amount'] as num).toDouble());
+
     setState(() {});
-  }
-
-  Future<List<Map<String, dynamic>>> fetchSalesReport(String date) async {
-    final database = openDatabase(join(await getDatabasesPath(), 'agrifarm.db'));
-    final db = await database;
-    return await db.rawQuery(
-        "SELECT product_name, SUM(quantity) AS total_qty, SUM(price) AS total_price FROM sales WHERE date = ? GROUP BY product_name", [date]
-    );
-  }
-
-  Future<List<Map<String, dynamic>>> fetchJobReport(String date) async {
-    final database = openDatabase(join(await getDatabasesPath(), 'agrifarm.db'));
-    final db = await database;
-    return await db.rawQuery(
-        "SELECT job_type, COUNT(*) AS total_jobs FROM farming_jobs WHERE date = ? GROUP BY job_type", [date]
-    );
   }
 
   Future<void> generatePDF() async {
@@ -62,27 +68,22 @@ class _ReportPageState extends State<ReportPage> {
               pw.Text("Date: $formattedDate", style: pw.TextStyle(fontSize: 16, color: PdfColors.grey600)),
               pw.Divider(),
 
-              // Sales Report
-              pw.Text("📈 Sales Report", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+              pw.Text("🧾 Order Summary", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 5),
-              salesData.isEmpty
-                  ? pw.Text("No sales records available", style: pw.TextStyle(color: PdfColors.grey))
+              orderSummaryData.isEmpty
+                  ? pw.Text("No order records available", style: pw.TextStyle(color: PdfColors.grey))
                   : pw.TableHelper.fromTextArray(
-                headers: ["Product", "Qty", "Total Price"],
-                data: salesData.map((sale) => [sale['product_name'], sale['total_qty'], "₹${sale['total_price']}"]).toList(),
+                headers: ["Payment", "Status", "Orders", "Amount"],
+                data: orderSummaryData.map((item) => [
+                  item['payment_method'],
+                  item['order_status'],
+                  item['total_orders'].toString(),
+                  "₹${item['total_amount']}"
+                ]).toList(),
               ),
-
-              pw.SizedBox(height: 15),
-
-              // Farming Job Report
-              pw.Text("🚜 Farming Job Report", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 5),
-              jobData.isEmpty
-                  ? pw.Text("No job records available", style: pw.TextStyle(color: PdfColors.grey))
-                  : pw.TableHelper.fromTextArray(
-                headers: ["Job Type", "Total Jobs"],
-                data: jobData.map((job) => [job['job_type'], job['total_jobs']]).toList(),
-              ),
+              pw.SizedBox(height: 10),
+              pw.Text("📦 Total Orders: $totalOrders | 💰 Revenue: ₹${totalAmount.toStringAsFixed(2)}",
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
             ],
           );
         },
@@ -123,7 +124,7 @@ class _ReportPageState extends State<ReportPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Date Picker Row
+            // Date Row
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -139,59 +140,51 @@ class _ReportPageState extends State<ReportPage> {
                 ),
               ],
             ),
-
             SizedBox(height: 15),
 
-            // Sales Report Card
-            buildReportCard("📈 Sales Report", salesData, Icons.shopping_cart, "product_name", "Qty: {total_qty}, ₹{total_price}"),
-
-            SizedBox(height: 15),
-
-            // Farming Job Report Card
-            buildReportCard("🚜 Farming Job Report", jobData, Icons.agriculture, "job_type", "Total Jobs: {total_jobs}"),
+            // Summary Card
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("🧾 Order Summary", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
+                    Divider(),
+                    orderSummaryData.isEmpty
+                        ? Center(child: Text("No records available", style: TextStyle(color: Colors.grey)))
+                        : Column(
+                      children: orderSummaryData.map((item) {
+                        return ListTile(
+                          leading: Icon(Icons.receipt_long, color: Colors.green),
+                          title: Text("${item['payment_method']} - ${item['order_status']}"),
+                          subtitle: Text("Orders: ${item['total_orders']}, Amount: ₹${item['total_amount']}"),
+                        );
+                      }).toList(),
+                    ),
+                    if (orderSummaryData.isNotEmpty)
+                      Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: Text(
+                          "📦 Total Orders: $totalOrders | 💰 Revenue: ₹${totalAmount.toStringAsFixed(2)}",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
 
-      // Floating Action Button for PDF Export
       floatingActionButton: FloatingActionButton.extended(
         onPressed: generatePDF,
         label: Text("Download PDF"),
         icon: Icon(Icons.picture_as_pdf),
         backgroundColor: Colors.green.shade700,
-      ),
-    );
-  }
-
-  Widget buildReportCard(String title, List<Map<String, dynamic>> data, IconData icon, String mainKey, String subTextTemplate) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
-            Divider(),
-            data.isEmpty
-                ? Center(child: Text("No records available", style: TextStyle(color: Colors.grey)))
-                : Column(
-              children: data.map((item) {
-                String subtitle = subTextTemplate;
-                item.forEach((key, value) {
-                  subtitle = subtitle.replaceAll("{$key}", value.toString());
-                });
-
-                return ListTile(
-                  leading: Icon(icon, color: Colors.green),
-                  title: Text(item[mainKey]),
-                  subtitle: Text(subtitle),
-                );
-              }).toList(),
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -1,45 +1,119 @@
 import 'package:flutter/material.dart';
 import 'billing_page.dart';
+import 'database_helper.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class CartPage extends StatefulWidget {
-  final List<Map<String, dynamic>> cartItems;
-  final Function(Map<String, dynamic>) onRemove;
-
-  CartPage({required this.cartItems, required this.onRemove});
-
   @override
   _CartPageState createState() => _CartPageState();
 }
 
 class _CartPageState extends State<CartPage> {
-  late List<Map<String, dynamic>> cartItems;
+  List<Map<String, dynamic>> cartItems = [];
+  int totalAmount = 0;
 
   @override
   void initState() {
     super.initState();
-    cartItems = List.from(widget.cartItems);
+    _loadCartItems();
   }
 
-  void updateQuantity(int index, int change) {
+  Future<void> _loadCartItems() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    int currentUserId = prefs.getInt('currentUserId') ?? 0;
+
+    if (currentUserId == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Please log in to view your cart")),
+      );
+      setState(() {
+        cartItems = [];
+        totalAmount = 0;
+      });
+      return;
+    }
+
+    final items = await DatabaseHelper().getCartItemsForUser(currentUserId);
+
     setState(() {
-      cartItems[index]['quantity'] += change;
-      if (cartItems[index]['quantity'] <= 0) {
-        widget.onRemove(cartItems[index]); // Remove item from parent
-        cartItems.removeAt(index);
-      }
+      // Ensure the list is mutable
+      cartItems = List<Map<String, dynamic>>.from(items);
+      totalAmount = _calculateTotal();
     });
   }
 
-  int calculateTotal() {
-    return cartItems.fold(0, (sum, item) => sum + ((item['price'] as num) * (item['quantity'] as num)).toInt());
+
+  Future<void> updateQuantity(int index, int change) async {
+    int newQuantity = cartItems[index]['quantity'] + change;
+
+    if (newQuantity <= 0) {
+      await removeItem(index);
+      return;
+    }
+
+    setState(() {
+      cartItems[index] = Map<String, dynamic>.from(cartItems[index]);
+      cartItems[index]['quantity'] = newQuantity;
+    });
+
+    int result = await DatabaseHelper().updateCartItemQuantity(
+      cartItems[index]['id'],
+      newQuantity,
+    );
+
+    if (result <= 0) {
+      setState(() {
+        cartItems[index]['quantity'] = newQuantity - change;
+        totalAmount = _calculateTotal();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to update quantity")),
+      );
+    }
+  }
+
+  Future<void> removeItem(int index) async {
+    final removedItem = cartItems[index];
+
+    setState(() {
+      cartItems.removeAt(index);
+      totalAmount = _calculateTotal();
+    });
+
+    final result = await DatabaseHelper().removeFromCart(removedItem['id']);
+
+    if (result <= 0) {
+      setState(() {
+        cartItems.insert(index, removedItem);
+        totalAmount = _calculateTotal();
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to remove item")),
+      );
+    }
+  }
+
+  int _calculateTotal() {
+    return cartItems.fold(0, (sum, item) =>
+    sum + ((item['price'] as num) * (item['quantity'] as num)).toInt());
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('My Cart')),
+      appBar: AppBar(
+        title: Text('My Cart', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.teal,
+        elevation: 4,
+      ),
       body: cartItems.isEmpty
-          ? Center(child: Text('Your cart is empty.'))
+          ? Center(
+        child: Text(
+          'Your cart is empty.',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+        ),
+      )
           : Column(
         children: [
           Expanded(
@@ -48,21 +122,57 @@ class _CartPageState extends State<CartPage> {
               itemBuilder: (context, index) {
                 var item = cartItems[index];
                 return Card(
-                  margin: EdgeInsets.all(8.0),
-                  child: ListTile(
-                    title: Text(item['name']),
-                    subtitle: Text('₹${item['price']} x ${item['quantity']}'),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
+                  margin:
+                  EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        IconButton(
-                          icon: Icon(Icons.remove),
-                          onPressed: () => updateQuantity(index, -1),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item['name'],
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                '₹${item['price']} x ${item['quantity']} = ₹${(item['price'] as num) * (item['quantity'] as num)}',
+                                style: TextStyle(
+                                  color: Colors.grey[700],
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        Text('${item['quantity']}'),
-                        IconButton(
-                          icon: Icon(Icons.add),
-                          onPressed: () => updateQuantity(index, 1),
+                        Row(
+                          children: [
+                            _quantityButton(Icons.remove,
+                                    () => updateQuantity(index, -1)),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8.0),
+                              child: Text('${item['quantity']}',
+                                  style: TextStyle(fontSize: 16)),
+                            ),
+                            _quantityButton(Icons.add,
+                                    () => updateQuantity(index, 1)),
+                            IconButton(
+                              icon:
+                              Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => removeItem(index),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -71,25 +181,79 @@ class _CartPageState extends State<CartPage> {
               },
             ),
           ),
-          Padding(
-            padding: EdgeInsets.all(16.0),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              boxShadow: [
+                BoxShadow(color: Colors.black12, blurRadius: 6)
+              ],
+            ),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Total: ₹${calculateTotal()}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                SizedBox(height: 10),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => BillingPage(totalAmount: calculateTotal())),
-                    );
-                  },
-                  child: Text('Proceed to Billing'),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Total:',
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w600),
+                    ),
+                    Text(
+                      '₹$totalAmount',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.teal,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal,
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: cartItems.isEmpty
+                        ? null
+                        : () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => BillingPage()),
+                      ).then((_) => _loadCartItems());
+                    },
+                    child: Text(
+                      'Proceed to Billing',
+                      style: TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _quantityButton(IconData icon, VoidCallback onPressed) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey[200],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: IconButton(
+        icon: Icon(icon, size: 20),
+        onPressed: onPressed,
       ),
     );
   }

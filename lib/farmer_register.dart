@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'otp_verification.dart';
+import 'database_helper.dart';
 
 class FarmerRegister extends StatefulWidget {
   @override
@@ -13,9 +14,36 @@ class _FarmerRegisterState extends State<FarmerRegister> {
 
   // ✅ Register Farmer with OTP Verification
   Future<void> _registerFarmer() async {
-    if (_nameController.text.isEmpty || _phoneController.text.isEmpty) {
+    String name = _nameController.text.trim();
+    String phone = _phoneController.text.trim();
+
+    // ✅ Basic Validations
+    if (name.isEmpty || phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter name and phone number')),
+      );
+      return;
+    }
+
+    if (name.length < 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Name must be at least 3 characters long')),
+      );
+      return;
+    }
+
+    if (!RegExp(r'^[0-9]{10}$').hasMatch(phone)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid 10-digit phone number')),
+      );
+      return;
+    }
+
+    // ✅ Check if Farmer Already Registered
+    final existingFarmer = await DatabaseHelper.instance.getFarmerByPhone(phone);
+    if (existingFarmer != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Phone number already registered. Please log in.')),
       );
       return;
     }
@@ -25,12 +53,13 @@ class _FarmerRegisterState extends State<FarmerRegister> {
       context,
       MaterialPageRoute(
         builder: (context) => OTPVerification(
-          name: _nameController.text,
-          phone: _phoneController.text,
+          name: name,
+          phone: phone,
         ),
       ),
     );
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -119,7 +148,6 @@ class _FarmerRegisterState extends State<FarmerRegister> {
                         ),
                         const SizedBox(height: 20),
 
-                        // ✅ Register Button
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
@@ -137,6 +165,20 @@ class _FarmerRegisterState extends State<FarmerRegister> {
                             ),
                           ),
                         ),
+
+                        const SizedBox(height: 10), // spacing between buttons
+
+                    // ✅ "Already registered? Log in" Button
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/farmer_login'); // Change this route as needed
+                          },
+                          child: const Text(
+                            'Already registered? Log in',
+                            style: TextStyle(color: Colors.green, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+
                       ],
                     ),
                   ),

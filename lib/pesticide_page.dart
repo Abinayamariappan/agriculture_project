@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
-import 'database_helper.dart'; // ✅ Import SQLite Database Helper
-
-// ✅ Global Variable to Store Logged-in Farmer ID
-int? loggedInFarmerId;
+import 'package:image/image.dart' as img;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'database_helper.dart';
+import 'farming_jobs_page.dart';
 
 class PesticidePage extends StatefulWidget {
   @override
@@ -12,25 +12,56 @@ class PesticidePage extends StatefulWidget {
 }
 
 class _PesticidePageState extends State<PesticidePage> {
-  final TextEditingController _pesticideTypeController = TextEditingController();
+  final TextEditingController _typeController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
-  final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _sprayingAreaController = TextEditingController();
-  File? _selectedImage;
-  String _imageStatus = "No Image Uploaded";
+  final TextEditingController _descriptionController = TextEditingController();
+  final TextEditingController _wagesController = TextEditingController();
 
-  // ✅ Pick Image from Gallery
+  File? _image;
+  String _imageStatus = "No Image Uploaded";
+  int? _farmerId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFarmerId();
+  }
+
+  Future<void> _loadFarmerId() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _farmerId = prefs.getInt('farmerId');
+    });
+  }
+
+  Future<File?> _compressImage(File imageFile) async {
+    final bytes = await imageFile.readAsBytes();
+    final img.Image? image = img.decodeImage(bytes);
+    if (image == null) return null;
+
+    final compressedImage = img.encodeJpg(image, quality: 70);
+    final newFile = File(imageFile.path)..writeAsBytesSync(compressedImage);
+    return newFile;
+  }
+
   Future<void> _pickImage() async {
-    final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      setState(() {
-        _selectedImage = File(pickedFile.path);
-        _imageStatus = "Image Uploaded ✅";
-      });
+    try {
+      final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
+      if (pickedFile != null) {
+        File? compressedImage = await _compressImage(File(pickedFile.path));
+        setState(() {
+          _image = compressedImage;
+          _imageStatus = "Image Uploaded ✅";
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to pick image: ${e.toString()}')),
+      );
     }
   }
 
-  // ✅ Show Success Alert
   void _showSuccessDialog() {
     showDialog(
       context: context,
@@ -38,59 +69,92 @@ class _PesticidePageState extends State<PesticidePage> {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
           title: const Text("Success ✅"),
-          content: const Text("Pesticide spraying request added successfully!"),
+          content: const Text(" Pesticide Spraying request added successfully!"),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Close the dialog
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => FarmingJobsPage(farmerId: _farmerId)),
+                );
+              },
+              child: const Text("Go to Jobs"),
+            ),
           ],
         );
       },
     );
   }
 
-  // ✅ Submit Pesticide Spraying Request
-  void _submitRequest() async {
-    if (loggedInFarmerId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error: No farmer logged in! Please login first.')),
-      );
-      return;
-    }
 
-    if (_pesticideTypeController.text.isEmpty ||
-        _locationController.text.isEmpty ||
-        _descriptionController.text.isEmpty ||
-        _sprayingAreaController.text.isEmpty ||
-        _selectedImage == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter all fields and select an image')),
-      );
-      return;
-    }
-
-    // ✅ Save to Database
-    await DatabaseHelper.instance.insertPesticide(
-      farmerId: loggedInFarmerId!, // Use the logged-in farmer ID
-      type: _pesticideTypeController.text,
-      location: _locationController.text,
-      sprayingArea: double.parse(_sprayingAreaController.text),
-      description: _descriptionController.text,
-      image: _selectedImage!.path,
-      status: 'Worker Requested',
-    );
-
-    // ✅ Show Success Alert
-    _showSuccessDialog();
-
-    // ✅ Clear Fields
-    _pesticideTypeController.clear();
-    _locationController.clear();
-    _descriptionController.clear();
-    _sprayingAreaController.clear();
-    setState(() {
-      _selectedImage = null;
-      _imageStatus = "No Image Uploaded";
-    });
+  Future<int?> getLoggedInFarmerId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('farmerId');
   }
+
+
+  void _submitRequest() async {
+    if (_farmerId == null ||
+        _typeController.text.trim().isEmpty ||
+        _locationController.text.trim().isEmpty ||
+        _sprayingAreaController.text.trim().isEmpty ||
+        _descriptionController.text.trim().isEmpty ||
+        _wagesController.text.trim().isEmpty ||
+        _image == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill all fields and upload an image')),
+      );
+      return;
+    }
+
+    try {
+      double? sprayingArea = double.tryParse(_sprayingAreaController.text.trim());
+      double? wages = double.tryParse(_wagesController.text.trim());
+
+      if (sprayingArea == null || wages == null) {
+        throw FormatException("Invalid number format");
+      }
+
+      if (sprayingArea <= 0 || wages <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Spraying area and wages must be positive numbers')),
+        );
+        return;
+      }
+
+      // Convert image to bytes for BLOB storage
+      final imageBytes = await _image!.readAsBytes();
+
+      await DatabaseHelper.instance.insertPesticide(
+        farmerId: _farmerId!,
+        type: _typeController.text.trim(),
+        location: _locationController.text.trim(),
+        sprayingArea: sprayingArea,
+        description: _descriptionController.text.trim(),
+        image: imageBytes, // Store as BLOB
+        wages: wages,
+        status: 'Worker Requested',
+      );
+
+      _showSuccessDialog();
+
+      _typeController.clear();
+      _locationController.clear();
+      _sprayingAreaController.clear();
+      _descriptionController.clear();
+      _wagesController.clear();
+      setState(() {
+        _image = null;
+        _imageStatus = "No Image Uploaded";
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: ${e.toString()}")),
+      );
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -98,16 +162,12 @@ class _PesticidePageState extends State<PesticidePage> {
       appBar: AppBar(title: const Text('Request Pesticide Spraying Worker'), backgroundColor: Colors.green),
       body: Stack(
         children: [
-          // ✅ Background Image
           Positioned.fill(
             child: Image.asset('assets/pesticide_bg.jpg', fit: BoxFit.cover),
           ),
-
-          // ✅ Blurred Overlay for Readability
           Positioned.fill(
             child: Container(color: Colors.black.withOpacity(0.3)),
           ),
-
           Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(15),
@@ -123,7 +183,6 @@ class _PesticidePageState extends State<PesticidePage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // ✅ Image Upload
                     GestureDetector(
                       onTap: _pickImage,
                       child: Container(
@@ -135,34 +194,29 @@ class _PesticidePageState extends State<PesticidePage> {
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(10),
-                          child: _selectedImage != null
-                              ? Image.file(_selectedImage!, fit: BoxFit.cover)
+                          child: _image != null
+                              ? Image.file(_image!, fit: BoxFit.cover)
                               : const Icon(Icons.image, size: 50, color: Colors.white),
                         ),
                       ),
                     ),
                     const SizedBox(height: 10),
-
-                    // ✅ Image Upload Status
                     Text(
                       _imageStatus,
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: _selectedImage != null ? Colors.green : Colors.red,
+                        color: _image != null ? Colors.green : Colors.red,
                       ),
                     ),
                     const SizedBox(height: 10),
-
-                    // ✅ Input Fields
-                    _buildTextField(_pesticideTypeController, 'Pesticide Type', Icons.bug_report),
+                    _buildTextField(_typeController, 'Pesticide Type', Icons.bug_report),
                     _buildTextField(_locationController, 'Location', Icons.location_on),
                     _buildTextField(_sprayingAreaController, 'Spraying Area (in acres)', Icons.landscape, isNumeric: true),
                     _buildTextField(_descriptionController, 'Description', Icons.description),
+                     _buildTextField(_wagesController, 'Wages (in INR)', Icons.money, isNumeric: true),
 
                     const SizedBox(height: 15),
-
-                    // ✅ Submit Button
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
@@ -185,7 +239,6 @@ class _PesticidePageState extends State<PesticidePage> {
     );
   }
 
-  // ✅ Reusable Text Field Widget with High Contrast
   Widget _buildTextField(TextEditingController controller, String label, IconData icon, {bool isNumeric = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -194,7 +247,7 @@ class _PesticidePageState extends State<PesticidePage> {
         keyboardType: isNumeric ? TextInputType.number : TextInputType.text,
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: const TextStyle(color: Colors.white), // ✅ White placeholder text
+          labelStyle: const TextStyle(color: Colors.white),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           prefixIcon: Icon(icon, color: Colors.white),
           filled: true,

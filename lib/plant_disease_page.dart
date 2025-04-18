@@ -1,6 +1,8 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
 
 class PlantDiseasePage extends StatefulWidget {
   @override
@@ -8,141 +10,161 @@ class PlantDiseasePage extends StatefulWidget {
 }
 
 class _PlantDiseasePageState extends State<PlantDiseasePage> {
-  File? _selectedImage;
-  String? _diseaseType;
-  String? _solution;
+  File? _image;
+  bool _isLoading = false;
+  Map<String, dynamic>? _result;
 
-  // ✅ Pick Image from Gallery or Camera
-  Future<void> _pickImage(ImageSource source) async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: source);
+  final String apiKey = 'bIYxKxD7VwY0EUV6aAD8fva3TZgd0U9IRvJP8RGIxiMRx3ZpIq';
+
+  Future<void> _pickImage() async {
+    final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
+
     if (pickedFile != null) {
       setState(() {
-        _selectedImage = File(pickedFile.path);
-        _diseaseType = null; // Reset previous result
-        _solution = null;
+        _image = File(pickedFile.path);
+        _result = null;
       });
     }
   }
 
-  // ✅ Simulate Disease Detection
-  void _submitForDetection() {
-    if (_selectedImage == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please upload an image first')),
-      );
-      return;
-    }
+  Future<void> _analyzeImage() async {
+    if (_image == null) return;
 
-    // Simulating AI model response (Replace this with real AI integration)
     setState(() {
-      _diseaseType = "Leaf Spot Disease"; // Example disease
-      _solution = "Apply a copper-based fungicide and ensure proper air circulation.";
+      _isLoading = true;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Analysis complete! Check results below.')),
+    try {
+      final bytes = await _image!.readAsBytes();
+      final base64Image = base64Encode(bytes);
+
+      final response = await http.post(
+        Uri.parse('https://api.plant.id/v2/identify'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Api-Key': apiKey,
+        },
+        body: jsonEncode({
+          "images": [base64Image],
+          "modifiers": ["crops_fast", "similar_images"],
+          "plant_language": "en",
+          "disease_details": ["common_names", "description", "treatment", "url"]
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _result = data;
+        });
+      } else {
+        throw Exception('Failed to analyze plant. Status Code: ${response.statusCode}');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}')),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Widget _buildResultCard() {
+    if (_result == null) return SizedBox();
+
+    final suggestions = _result!['suggestions'] ?? [];
+
+    if (suggestions.isEmpty) {
+      return const Text('No diseases found.');
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: suggestions.map<Widget>((item) {
+        final plantName = item['plant_name'];
+        final probability = (item['probability'] * 100).toStringAsFixed(2);
+        final diseases = item['diseases'] as List<dynamic>?;
+
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Plant: $plantName', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text('Confidence: $probability%'),
+                if (diseases != null && diseases.isNotEmpty)
+                  ...diseases.map((disease) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Disease: ${disease['name']}', style: TextStyle(fontWeight: FontWeight.bold)),
+                        Text('Description: ${disease['description'] ?? "N/A"}'),
+                        Text('Treatment: ${disease['treatment'] ?? "N/A"}'),
+                      ],
+                    ),
+                  )),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Plant Disease Identification', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.green[700],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
+      appBar: AppBar(title: const Text('Plant Disease Identifier'), backgroundColor: Colors.green),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // ✅ Image Display Card
-            Card(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-              elevation: 8,
-              child: Container(
-                width: double.infinity,
-                height: 250,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(15),
-                  color: Colors.white,
-                ),
-                child: _selectedImage != null
-                    ? ClipRRect(
-                  borderRadius: BorderRadius.circular(15),
-                  child: Image.file(_selectedImage!, fit: BoxFit.cover),
-                )
-                    : Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Icon(Icons.image_outlined, size: 60, color: Colors.grey),
-                      SizedBox(height: 10),
-                      Text("No Image Selected", style: TextStyle(color: Colors.grey, fontSize: 16)),
-                    ],
+            if (_image != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.file(_image!, height: 220, fit: BoxFit.cover),
+              )
+            else
+              GestureDetector(
+                onTap: _pickImage,
+                child: Container(
+                  height: 200,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green),
+                  ),
+                  child: const Center(
+                    child: Text('Tap to Upload Plant Image', style: TextStyle(color: Colors.green)),
                   ),
                 ),
               ),
-            ),
-
             const SizedBox(height: 20),
-
-            // ✅ Button Row for Image Selection
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildCustomButton(Icons.camera_alt, "Capture", Colors.blue, () => _pickImage(ImageSource.camera)),
-                _buildCustomButton(Icons.photo_library, "Gallery", Colors.green, () => _pickImage(ImageSource.gallery)),
-              ],
-            ),
-
-            const SizedBox(height: 20),
-
-            // ✅ Submit Button
-            ElevatedButton(
-              onPressed: _submitForDetection,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 30),
+            if (_image != null && !_isLoading)
+              ElevatedButton.icon(
+                onPressed: _analyzeImage,
+                icon: const Icon(Icons.search),
+                label: const Text('Analyze Image'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                ),
               ),
-              child: const Text("Submit for Analysis", style: TextStyle(fontSize: 16, color: Colors.white)),
-            ),
-
-            const SizedBox(height: 20),
-
-            // ✅ Display Disease Type and Solution
-            if (_diseaseType != null && _solution != null)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("🔍 Disease Detected:", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  Text(_diseaseType!, style: TextStyle(fontSize: 16, color: Colors.red)),
-
-                  const SizedBox(height: 10),
-
-                  Text("💡 Solution:", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  Text(_solution!, style: TextStyle(fontSize: 16, color: Colors.green)),
-                ],
+            if (_isLoading)
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: CircularProgressIndicator(),
               ),
+            const SizedBox(height: 20),
+            if (_result != null) _buildResultCard(),
           ],
         ),
-      ),
-    );
-  }
-
-  // ✅ Custom Button Widget
-  Widget _buildCustomButton(IconData icon, String label, Color color, VoidCallback onPressed) {
-    return ElevatedButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icon, color: Colors.white),
-      label: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-        elevation: 5,
       ),
     );
   }

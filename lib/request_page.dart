@@ -13,16 +13,24 @@ class _RequestPageState extends State<RequestPage> {
   final TextEditingController locationController = TextEditingController();
   final TextEditingController descriptionController = TextEditingController();
   File? _selectedImage;
-  final ImagePicker _picker = ImagePicker();
-  String imageUploadStatus = "Upload Image";
+  String imageUploadStatus = "No image selected";
+
+  final ImagePicker _picker = ImagePicker(); // Ensure this is initialized
+
 
   Future<void> pickImage() async {
     final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
+      print("Image picked: ${pickedFile.path}");
+
       setState(() {
         _selectedImage = File(pickedFile.path);
         imageUploadStatus = "Uploaded";
       });
+
+      print("Image updated in UI");
+    } else {
+      print("No image selected");
     }
   }
 

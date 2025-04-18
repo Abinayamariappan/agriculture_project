@@ -18,40 +18,59 @@ class _FarmerLoginState extends State<FarmerLogin> {
   @override
   void initState() {
     super.initState();
-    _checkIfRegistered();
+    _checkLoggedInFarmer(); // 👈 This will check shared prefs instead
   }
 
-  // ✅ Check If Farmer is Already Registered & Redirect
-  Future<void> _checkIfRegistered() async {
-    final farmer = await DatabaseHelper.instance.getFarmerByPhone(_phoneController.text);
-    if (farmer != null && mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => FarmerDashboard(
-            farmerId: farmer['id'],  // Pass the required parameters
-            name: farmer['name'],
-            phone: farmer['phone'],
+  Future<void> _checkLoggedInFarmer() async {
+    final prefs = await SharedPreferences.getInstance();
+    final farmerId = prefs.getInt('farmerId');
+
+    if (farmerId != null) {
+      final farmer = await DatabaseHelper.instance.getFarmerById(farmerId); // You'll need to add this if missing
+
+      if (farmer != null && mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => FarmerDashboard(
+              farmerId: farmerId.toString(),
+              name: farmer['name'] ?? "Unknown",
+              phone: farmer['phone'] ?? "Not Available",
+            ),
           ),
-        ),
-      );
+        );
+      }
     }
   }
+
+
 
   // ✅ Login Function
 
   Future<void> _login() async {
-    print("📌 Login Attempted with Phone: ${_phoneController.text}");
+    String phoneInput = _phoneController.text.trim();
 
-    final farmer = await DatabaseHelper.instance.getFarmerByPhone(_phoneController.text);
+    if (phoneInput.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a phone number')),
+      );
+      return;
+    }
+
+    print("📌 Login Attempted with Phone: $phoneInput");
+
+    final farmer = await DatabaseHelper.instance.getFarmerByPhone(phoneInput);
     print("📌 Farmer Found: $farmer");
 
     if (farmer != null) {
-      String farmerId = farmer['id']?.toString() ?? "";  // Ensure it's a string
+      String farmerId = farmer['id'].toString();  // Ensure it's a string for navigation
       String name = farmer['name'] ?? "Unknown";
       String phone = farmer['phone'] ?? "Not Available";
 
-      // ✅ Store the logged-in phone number in SharedPreferences
       final prefs = await SharedPreferences.getInstance();
+
+      // ✅ Save farmerId as int and phone as String to SharedPreferences
+      await prefs.setInt('farmerId', farmer['id']);
       await prefs.setString('loggedInFarmerPhone', phone);
 
       if (mounted) {
@@ -69,7 +88,7 @@ class _FarmerLoginState extends State<FarmerLogin> {
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid phone number')),
+          const SnackBar(content: Text('Invalid phone number or not registered')),
         );
       }
     }

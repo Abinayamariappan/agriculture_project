@@ -1,0 +1,94 @@
+{
+  "districts": {
+    "Tirunelveli": {
+      "coordinates": {"lat": 8.7139, "lon": 77.7567},
+      "soilType": "Red Sandy Soil",
+      "pH": 6.8,
+      "organicMatter": 1.2,
+      "nitrogen": 280,
+      "phosphorus": 18,
+      "potassium": 210,
+      "suggestedCrops": "Paddy, Sugarcane, Groundnut, Pulses"
+    },
+    "Chennai": {
+      "coordinates": {"lat": 13.0827, "lon": 80.2707},
+      "soilType": "Coastal Alluvial Soil",
+      "pH": 7.8,
+      "organicMatter": 0.8,
+      "nitrogen": 210,
+      "phosphorus": 15,
+      "potassium": 190,
+      "suggestedCrops": "Rice, Coconut, Vegetables, Casuarina"
+    },
+    "Madurai": {
+      "coordinates": {"lat": 9.9252, "lon": 78.1198},
+      "soilType": "Black Cotton Soil",
+      "pH": 8.1,
+      "organicMatter": 1.4,
+      "nitrogen": 240,
+      "phosphorus": 12,
+      "potassium": 320,
+      "suggestedCrops": "Cotton, Millets, Pulses, Oilseeds"
+    },
+    "Coimbatore": {
+      "coordinates": {"lat": 11.0168, "lon": 76.9558},
+      "soilType": "Red Loamy Soil",
+      "pH": 7.2,
+      "organicMatter": 1.8,
+      "nitrogen": 310,
+      "phosphorus": 22,
+      "potassium": 280,
+      "suggestedCrops": "Cotton, Maize, Pulses, Vegetables"
+    },
+    "Salem": {
+      "coordinates": {"lat": 11.6643, "lon": 78.1460},
+      "soilType": "Red Ferruginous Soil",
+      "pH": 6.5,
+      "organicMatter": 1.5,
+      "nitrogen": 260,
+      "phosphorus": 20,
+      "potassium": 240,
+      "suggestedCrops": "Tapioca, Groundnut, Millets, Pulses"
+    },
+    "Erode": {
+      "coordinates": {"lat": 11.3410, "lon": 77.7172},
+      "soilType": "Red Sandy Loam",
+      "pH": 7.0,
+      "organicMatter": 1.3,
+      "nitrogen": 230,
+      "phosphorus": 18,
+      "potassium": 220,
+      "suggestedCrops": "Turmeric, Sugarcane, Maize, Vegetables"
+    },
+    "Thanjavur": {
+      "coordinates": {"lat": 10.7867, "lon": 79.1378},
+      "soilType": "Alluvial Soil",
+      "pH": 7.5,
+      "organicMatter": 2.1,
+      "nitrogen": 360,
+      "phosphorus": 24,
+      "potassium": 290,
+      "suggestedCrops": "Paddy, Sugarcane, Banana, Coconut"
+    },
+    "Kanyakumari": {
+      "coordinates": {"lat": 8.0883, "lon": 77.5385},
+      "soilType": "Laterite Soil",
+      "pH": 5.8,
+      "organicMatter": 2.2,
+      "nitrogen": 340,
+      "phosphorus": 16,
+      "potassium": 230,
+      "suggestedCrops": "Rubber, Coconut, Banana, Tapioca"
+    },
+    "Tiruvannamalai": {
+      "coordinates": {"lat": 12.2253, "lon": 79.0747},
+      "soilType": "Red Sandy Soil",
+      "pH": 6.9,
+      "organicMatter": 1.1,
+      "nitrogen": 250,
+      "phosphorus": 14,
+      "potassium": 200,
+      "suggestedCrops": "Groundnut, Millets, Pulses, Oilseeds"
+    }
+  }
+}

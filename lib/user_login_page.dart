@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
-import 'user_homepage.dart';
+import 'user_navigation_bar.dart';
 import 'user_registration_page.dart';
+import 'database_helper.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 
 class UserLoginPage extends StatefulWidget {
   @override
@@ -14,16 +17,24 @@ class _UserLoginPageState extends State<UserLoginPage> {
   TextEditingController passwordController = TextEditingController();
   bool _obscurePassword = true;
 
-  void _login() {
+  void _login() async {
     if (_formKey.currentState!.validate()) {
-      String name = nameController.text.trim();
       String phone = phoneController.text.trim();
       String password = passwordController.text.trim();
 
-      if (name == "Abinaya" && phone == "8838778182" && password == "password123") {
+      Map<String, dynamic>? user = await DatabaseHelper().loginUser(phone, password);
+
+      if (user != null) {
+        // ✅ Save to SharedPreferences
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.setInt('currentUserId', user['id']);
+        await prefs.setString('userName', user['name']);
+        await prefs.setString('userPhone', user['phone']);
+
+        // ✅ Navigate to Home
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => UserHomePage()),
+          MaterialPageRoute(builder: (context) => UserNavigationBar()),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -32,6 +43,10 @@ class _UserLoginPageState extends State<UserLoginPage> {
       }
     }
   }
+
+
+
+
 
   @override
   Widget build(BuildContext context) {

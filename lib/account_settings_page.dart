@@ -1,8 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AccountSettingsPage extends StatefulWidget {
+  const AccountSettingsPage({Key? key}) : super(key: key);
+
   @override
   _AccountSettingsPageState createState() => _AccountSettingsPageState();
 }
@@ -10,20 +13,38 @@ class AccountSettingsPage extends StatefulWidget {
 class _AccountSettingsPageState extends State<AccountSettingsPage> {
   File? _imageFile;
   final ImagePicker _picker = ImagePicker();
-
-  // Static user data
-  String name = "Abinaya"; // Static name
-  String phone = "8838778182"; // Static phone number
-  String address = "               "; // Initially empty address
+  String name = "";
+  String phone = "";
+  String address = "";
+  String? imagePath;
   TextEditingController addressController = TextEditingController();
 
-  // Function to pick an image from gallery or camera
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    setState(() {
+      name = prefs.getString('userName') ?? '';
+      phone = prefs.getString('userPhone') ?? '';
+      address = prefs.getString('userAddress') ?? '';
+    });
+  }
+
   Future<void> _pickImage(ImageSource source) async {
-    final pickedFile = await _picker.pickImage(source: source);
-    if (pickedFile != null) {
-      setState(() {
-        _imageFile = File(pickedFile.path);
-      });
+    try {
+      final pickedFile = await _picker.pickImage(source: source);
+      if (pickedFile != null) {
+        setState(() {
+          _imageFile = File(pickedFile.path);
+          imagePath = pickedFile.path;
+        });
+      }
+    } catch (e) {
+      print("Error picking image: $e");
     }
   }
 
@@ -55,15 +76,19 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     );
   }
 
-  void _editAddress() {
-    setState(() {
-      address = addressController.text; // Save the entered address
-    });
-    Navigator.pop(context); // Close the bottom sheet or dialog
+  Future<void> _saveAddress() async {
+    if (addressController.text.isNotEmpty) {
+      setState(() {
+        address = addressController.text;
+      });
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      prefs.setString('userAddress', address);
+      Navigator.pop(context);
+    }
   }
 
   void _showEditAddressDialog() {
-    addressController.text = address; // Prefill existing address
+    addressController.text = address;
     showDialog(
       context: context,
       builder: (context) {
@@ -79,7 +104,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
               child: Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: _editAddress,
+              onPressed: _saveAddress,
               child: Text('Save Address'),
             ),
           ],
@@ -96,7 +121,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
         actions: [
           IconButton(
             icon: Icon(Icons.edit),
-            onPressed: _showEditAddressDialog, // Open the dialog to enter address
+            onPressed: _showEditAddressDialog,
           ),
         ],
       ),
@@ -109,10 +134,10 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
               borderRadius: BorderRadius.circular(15),
             ),
             child: Container(
-              width: MediaQuery.of(context).size.width * 0.85, // Set card width
+              width: MediaQuery.of(context).size.width * 0.85,
               padding: EdgeInsets.all(20),
               child: Column(
-                mainAxisSize: MainAxisSize.min, // Prevent extra space
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   GestureDetector(
@@ -120,8 +145,10 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                     child: CircleAvatar(
                       radius: 50,
                       backgroundColor: Colors.grey[300],
-                      backgroundImage: _imageFile != null ? FileImage(_imageFile!) : null,
-                      child: _imageFile == null
+                      backgroundImage: _imageFile != null
+                          ? FileImage(_imageFile!)
+                          : (imagePath != null ? FileImage(File(imagePath!)) : null),
+                      child: (_imageFile == null && imagePath == null)
                           ? Icon(Icons.camera_alt, size: 40, color: Colors.white)
                           : null,
                     ),

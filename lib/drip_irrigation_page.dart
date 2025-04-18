@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'database_helper.dart';
+import 'farming_jobs_page.dart';
 
 class DripIrrigationPage extends StatefulWidget {
   @override
@@ -14,34 +16,51 @@ class _DripIrrigationPageState extends State<DripIrrigationPage> {
   final TextEditingController _waterSourceController = TextEditingController();
   final TextEditingController _landAreaController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
+  final TextEditingController _wagesController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
 
-  File? _selectedImage;
+  File? _image;
   String _imageStatus = "No Image Uploaded";
-  int? _loggedInFarmerId;
+  int? _farmerId;
 
   @override
   void initState() {
     super.initState();
-    _getFarmerId();
+    _loadFarmerId();
   }
 
-  // ✅ Get Farmer ID from SharedPreferences
-  Future<void> _getFarmerId() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
+  Future<void> _loadFarmerId() async {
+    final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _loggedInFarmerId = prefs.getInt('farmerId');
+      _farmerId = prefs.getInt('farmerId');
     });
   }
 
-  // ✅ Pick Image from Gallery
+
+  Future<File?> _compressImage(File imageFile) async {
+    final bytes = await imageFile.readAsBytes();
+    final img.Image? image = img.decodeImage(bytes);
+    if (image == null) return null;
+
+    final compressedImage = img.encodeJpg(image, quality: 70);
+    final newFile = File(imageFile.path)..writeAsBytesSync(compressedImage);
+    return newFile;
+  }
+
   Future<void> _pickImage() async {
-    final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      setState(() {
-        _selectedImage = File(pickedFile.path);
-        _imageStatus = "Image Uploaded ✅";
-      });
+    try {
+      final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
+      if (pickedFile != null) {
+        File? compressedImage = await _compressImage(File(pickedFile.path));
+        setState(() {
+          _image = compressedImage;
+          _imageStatus = "Image Uploaded ✅";
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to pick image: ${e.toString()}')),
+      );
     }
   }
 
@@ -55,59 +74,92 @@ class _DripIrrigationPageState extends State<DripIrrigationPage> {
           title: const Text("Success ✅"),
           content: const Text("Irrigation request added successfully!"),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => FarmingJobsPage(farmerId: _farmerId)),
+                );
+              },
+              child: const Text("Go to Jobs"),
+            ),
           ],
         );
       },
     );
   }
 
-  // ✅ Submit Irrigation Request
   void _submitRequest() async {
-    if (_loggedInFarmerId == null) {
+    // Validate all required fields and ensure the image is selected
+    if (_typeController.text.trim().isEmpty ||
+        _waterSourceController.text.trim().isEmpty ||
+        _landAreaController.text.trim().isEmpty ||
+        _locationController.text.trim().isEmpty ||
+        _descriptionController.text.trim().isEmpty ||
+        _wagesController.text.trim().isEmpty ||
+        _image == null ||
+        _farmerId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error: Farmer ID not found!')),
+        const SnackBar(content: Text('Please fill all fields and upload an image')),
       );
       return;
     }
 
-    if (_typeController.text.isEmpty ||
-        _waterSourceController.text.isEmpty ||
-        _landAreaController.text.isEmpty ||
-        _locationController.text.isEmpty ||
-        _descriptionController.text.isEmpty ||
-        _selectedImage == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter all fields and select an image')),
+    try {
+      // Convert land area and wages to numbers
+      double? landArea = double.tryParse(_landAreaController.text.trim());
+      double? wages = double.tryParse(_wagesController.text.trim());
+
+      // Check if land area and wages are valid numbers
+      if (landArea == null || wages == null) {
+        throw FormatException("Invalid number format");
+      }
+
+      // Validate that land area and wages are positive numbers
+      if (landArea <= 0 || wages <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Land area and wages must be positive numbers')),
+        );
+        return;
+      }
+
+      // Convert the selected image to bytes
+      final imageBytes = await _image!.readAsBytes();
+
+      // Save the data to the database
+      await DatabaseHelper.instance.insertDripIrrigation(
+        farmerId: _farmerId!,
+        type: _typeController.text.trim(),
+        waterSource: _waterSourceController.text.trim(),
+        landArea: landArea,
+        location: _locationController.text.trim(),
+        description: _descriptionController.text.trim(),
+        image: imageBytes, // Store the image as bytes
+        wages: wages,
+        status: 'Worker Requested',
       );
-      return;
+
+      // Show success dialog after submission
+      _showSuccessDialog();
+
+      // Clear all fields and reset the image status
+      _typeController.clear();
+      _waterSourceController.clear();
+      _landAreaController.clear();
+      _locationController.clear();
+      _descriptionController.clear();
+      _wagesController.clear();
+      setState(() {
+        _image = null;
+        _imageStatus = "No Image Uploaded";
+      });
+    } catch (e) {
+      // Handle any errors that may occur during the submission process
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: ${e.toString()}")),
+      );
     }
-
-    // ✅ Save to Database
-    await DatabaseHelper.instance.insertDripIrrigation(
-      farmerId: _loggedInFarmerId!,
-      type: _typeController.text,
-      waterSource: _waterSourceController.text,
-      landArea: double.parse(_landAreaController.text),
-      location: _locationController.text,
-      description: _descriptionController.text,
-      image: _selectedImage!.path,
-      status: 'Worker Requested',
-    );
-
-    // ✅ Show Success Alert
-    _showSuccessDialog();
-
-    // ✅ Clear Fields
-    _typeController.clear();
-    _waterSourceController.clear();
-    _landAreaController.clear();
-    _locationController.clear();
-    _descriptionController.clear();
-    setState(() {
-      _selectedImage = null;
-      _imageStatus = "No Image Uploaded";
-    });
   }
 
   @override
@@ -153,8 +205,8 @@ class _DripIrrigationPageState extends State<DripIrrigationPage> {
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(10),
-                          child: _selectedImage != null
-                              ? Image.file(_selectedImage!, fit: BoxFit.cover)
+                          child: _image != null
+                              ? Image.file(_image!, fit: BoxFit.cover)
                               : const Icon(Icons.image, size: 50, color: Colors.white),
                         ),
                       ),
@@ -167,7 +219,7 @@ class _DripIrrigationPageState extends State<DripIrrigationPage> {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: _selectedImage != null ? Colors.green : Colors.red,
+                        color: _image != null ? Colors.green : Colors.red,
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -177,6 +229,7 @@ class _DripIrrigationPageState extends State<DripIrrigationPage> {
                     _buildTextField(_waterSourceController, 'Water Source', Icons.waves),
                     _buildTextField(_landAreaController, 'Land Area (in acres)', Icons.landscape, isNumeric: true),
                     _buildTextField(_locationController, 'Location', Icons.location_on),
+                    _buildTextField(_wagesController, 'Wages (per day)', Icons.money, isNumeric: true),
                     _buildTextField(_descriptionController, 'Description', Icons.description),
 
                     const SizedBox(height: 15),

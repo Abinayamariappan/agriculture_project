@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
-import 'database_helper.dart'; // ✅ Import SQLite Database Helper
+import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'farmer_sales_page.dart';
+import 'database_helper.dart';
 
 class CropDetailsPage extends StatefulWidget {
   @override
@@ -10,23 +12,47 @@ class CropDetailsPage extends StatefulWidget {
 }
 
 class _CropDetailsPageState extends State<CropDetailsPage> {
-  final TextEditingController _cropNameController = TextEditingController();
-  final TextEditingController _ratePerKgController = TextEditingController();
-  final TextEditingController _minKgController = TextEditingController();
-  final TextEditingController _totalKgController = TextEditingController(); // ✅ Added Total KG Field
-  final TextEditingController _descriptionController = TextEditingController(); // ✅ Add Crop Description Field
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _priceController = TextEditingController();
+  final TextEditingController _minOrderController = TextEditingController();
+  final TextEditingController _availableQtyController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
 
-  File? _selectedImage;
-  String _imageStatus = "No Image Uploaded"; // ✅ Track Image Upload Status
+  File? _image;
+  String _imageStatus = "No Image Uploaded";
+  int? _farmerId;
 
-  // ✅ Pick Image from Gallery
+  @override
+  void initState() {
+    super.initState();
+    _loadFarmerId();
+  }
+
+  Future<void> _loadFarmerId() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _farmerId = prefs.getInt('farmerId');
+    });
+  }
+
+  Future<File?> _compressImage(File imageFile) async {
+    final bytes = await imageFile.readAsBytes();
+    final img.Image? image = img.decodeImage(bytes);
+    if (image == null) return null;
+
+    final compressedImage = img.encodeJpg(image, quality: 70);
+    final newFile = File(imageFile.path)..writeAsBytesSync(compressedImage);
+    return newFile;
+  }
+
   Future<void> _pickImage() async {
     try {
       final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
       if (pickedFile != null) {
+        File? compressedImage = await _compressImage(File(pickedFile.path));
         setState(() {
-          _selectedImage = File(pickedFile.path);
-          _imageStatus = "Image Uploaded ✅"; // ✅ Show success message
+          _image = compressedImage;
+          _imageStatus = "Image Uploaded ✅";
         });
       }
     } catch (e) {
@@ -36,7 +62,6 @@ class _CropDetailsPageState extends State<CropDetailsPage> {
     }
   }
 
-  // ✅ Show Success Alert Box
   void _showSuccessDialog() {
     showDialog(
       context: context,
@@ -47,8 +72,14 @@ class _CropDetailsPageState extends State<CropDetailsPage> {
           content: const Text("Crop added successfully!"),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("OK"),
+              onPressed: () {
+                Navigator.of(context).pop(); // Close the dialog
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => FarmerSalesPage(farmerId: _farmerId)),
+                );
+              },
+              child: const Text("Go to Sales"),
             ),
           ],
         );
@@ -56,81 +87,68 @@ class _CropDetailsPageState extends State<CropDetailsPage> {
     );
   }
 
-  // ✅ Get Farmer ID from Database
-  Future<int?> _getFarmerId() async {
-    // Retrieve the logged-in farmer's phone number from SharedPreferences
-    final prefs = await SharedPreferences.getInstance();
-    String? farmerPhone = prefs.getString('loggedInFarmerPhone'); // Ensure this key is stored at login
-
-    if (farmerPhone == null) return null; // Ensure the phone number is available
-
-    final farmer = await DatabaseHelper.instance.getFarmerByPhone(farmerPhone);
-    return farmer?['id'];
+  void _clearFields() {
+    _nameController.clear();
+    _priceController.clear();
+    _minOrderController.clear();
+    _availableQtyController.clear();
+    _descriptionController.clear();
+    setState(() {
+      _image = null;
+      _imageStatus = "No Image Uploaded";
+    });
   }
 
+  Future<int?> getLoggedInFarmerId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('farmerId');
+  }
 
-  // ✅ Add Crop to Database
   void _addCrop() async {
-    if (_cropNameController.text.isEmpty ||
-        _ratePerKgController.text.isEmpty ||
-        _minKgController.text.isEmpty ||
-        _totalKgController.text.isEmpty || // ✅ Validate Total KG
+    if (_nameController.text.isEmpty ||
+        _priceController.text.isEmpty ||
+        _minOrderController.text.isEmpty ||
+        _availableQtyController.text.isEmpty ||
         _descriptionController.text.isEmpty ||
-        _selectedImage == null) {
+        _image == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter all fields and select an image')),
       );
       return;
     }
 
-    double ratePerKg, minKg, totalKg;
     try {
-      ratePerKg = double.parse(_ratePerKgController.text);
-      minKg = double.parse(_minKgController.text);
-      totalKg = double.parse(_totalKgController.text); // ✅ Parse Total KG
+      final bytes = await _image!.readAsBytes();
+      final double price = double.parse(_priceController.text);
+      final double minKg = double.parse(_minOrderController.text);
+      final double totalKg = double.parse(_availableQtyController.text);
+
+      final farmerId = await getLoggedInFarmerId();
+      if (farmerId == null) {
+        throw Exception("Farmer ID not found");
+      }
+
+      await DatabaseHelper().insertCrop(
+        name: _nameController.text,
+        price: price,
+        minKg: minKg,
+        totalKg: totalKg,
+        description: _descriptionController.text,
+        image: bytes,
+        status: "Available",
+        farmerId: farmerId,
+      );
+
+      _clearFields();
+      _showSuccessDialog(); // 👉 This will show dialog and navigate to FarmerSalesPage
+
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter valid numeric values for rate, min kg, and total kg')),
+        SnackBar(content: Text('Failed to insert crop: $e')),
       );
-      return;
     }
-
-    // ✅ Get farmerId dynamically
-    int? farmerId = await _getFarmerId();
-    if (farmerId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Farmer not found! Please log in again.')),
-      );
-      return;
-    }
-
-    // ✅ Save Crop Data to SQLite Database
-    await DatabaseHelper.instance.insertProduct(
-      farmerId: farmerId, // ✅ Pass farmerId
-      name: _cropNameController.text,
-      category: 'Crop',
-      price: ratePerKg,
-      minKg: minKg,
-      totalKg: totalKg, // ✅ Pass totalKg
-      description: _descriptionController.text,
-      status: 'Available',
-      image: _selectedImage?.path ?? '', // ✅ Ensure image is handled properly
-    );
-
-    // ✅ Show Success Alert Box
-    _showSuccessDialog();
-
-    // ✅ Clear Fields After Adding
-    _cropNameController.clear();
-    _ratePerKgController.clear();
-    _minKgController.clear();
-    _totalKgController.clear(); // ✅ Clear Total KG
-    _descriptionController.clear();
-    setState(() {
-      _selectedImage = null;
-      _imageStatus = "No Image Uploaded";
-    });
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -138,25 +156,18 @@ class _CropDetailsPageState extends State<CropDetailsPage> {
       appBar: AppBar(title: const Text('Add Crop Details'), backgroundColor: Colors.green),
       body: Stack(
         children: [
-          // ✅ Background Image
           Positioned.fill(
-            child: Image.asset(
-              'assets/farm_bg.jpg', // 🔹 Make sure this image exists in your assets folder
-              fit: BoxFit.cover,
-            ),
+            child: Image.asset('assets/farm_bg.jpg', fit: BoxFit.cover),
           ),
-
-          // ✅ Darkened Overlay for Readability
           Positioned.fill(
             child: Container(color: Colors.black.withOpacity(0.3)),
           ),
-
           Center(
             child: SingleChildScrollView(
               child: Padding(
                 padding: const EdgeInsets.all(15),
                 child: Container(
-                  width: MediaQuery.of(context).size.width * 0.9, // ✅ Adjusted for better centering
+                  width: MediaQuery.of(context).size.width * 0.9,
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(15),
@@ -174,7 +185,6 @@ class _CropDetailsPageState extends State<CropDetailsPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // ✅ Image Upload Section
                         GestureDetector(
                           onTap: _pickImage,
                           child: Container(
@@ -186,35 +196,28 @@ class _CropDetailsPageState extends State<CropDetailsPage> {
                             ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(10),
-                              child: _selectedImage != null
-                                  ? Image.file(_selectedImage!, fit: BoxFit.cover)
+                              child: _image != null
+                                  ? Image.file(_image!, fit: BoxFit.cover)
                                   : const Icon(Icons.image, size: 50, color: Colors.white),
                             ),
                           ),
                         ),
                         const SizedBox(height: 10),
-
-                        // ✅ Image Upload Status Message
                         Text(
                           _imageStatus,
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
-                            color: _selectedImage != null ? Colors.green : Colors.red,
+                            color: _image != null ? Colors.green : Colors.red,
                           ),
                         ),
                         const SizedBox(height: 10),
-
-                        // ✅ Input Fields
-                        _buildTextField(_cropNameController, 'Crop Name', Icons.eco),
-                        _buildTextField(_ratePerKgController, 'Rate per Kg', Icons.attach_money, isNumeric: true),
-                        _buildTextField(_minKgController, 'Min Kg Purchase', Icons.scale, isNumeric: true),
-                        _buildTextField(_totalKgController, 'Total Kg Available', Icons.shopping_cart, isNumeric: true),
+                        _buildTextField(_nameController, 'Crop Name', Icons.eco),
+                        _buildTextField(_priceController, 'Rate per Kg', Icons.attach_money, isNumeric: true),
+                        _buildTextField(_minOrderController, 'Min Kg Purchase', Icons.scale, isNumeric: true),
+                        _buildTextField(_availableQtyController, 'Total Kg Available', Icons.shopping_cart, isNumeric: true),
                         _buildTextField(_descriptionController, 'Crop Description', Icons.description),
-
                         const SizedBox(height: 15),
-
-                        // ✅ Create Crop Button
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
@@ -224,7 +227,7 @@ class _CropDetailsPageState extends State<CropDetailsPage> {
                               padding: const EdgeInsets.symmetric(vertical: 15),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
-                            child: const Text("Create Crop", style: TextStyle(fontSize: 18, color: Colors.white)),
+                            child: const Text("Submit Crop", style: TextStyle(fontSize: 18, color: Colors.white)),
                           ),
                         ),
                       ],
@@ -245,23 +248,23 @@ class _CropDetailsPageState extends State<CropDetailsPage> {
       child: TextField(
         controller: controller,
         keyboardType: isNumeric ? TextInputType.number : TextInputType.text,
-        style: const TextStyle(color: Colors.white), // ✅ Text color set to white
+        style: const TextStyle(color: Colors.white),
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: const TextStyle(color: Colors.white), // ✅ Placeholder color set to white
+          labelStyle: const TextStyle(color: Colors.white),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Colors.white), // ✅ Border color set to white
+            borderSide: const BorderSide(color: Colors.white),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Colors.white), // ✅ Keeps border white even when not focused
+            borderSide: const BorderSide(color: Colors.white),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Colors.white), // ✅ Keeps border white when focused
+            borderSide: const BorderSide(color: Colors.white),
           ),
-          prefixIcon: Icon(icon, color: Colors.white), // ✅ Icon color set to white
+          prefixIcon: Icon(icon, color: Colors.white),
         ),
       ),
     );
