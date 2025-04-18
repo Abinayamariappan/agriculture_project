@@ -65,7 +65,7 @@ class _GovtSchemesPageState extends State<GovtSchemesPage> {
       if (await canLaunchUrl(uri)) {
         await launchUrl(
           uri,
-          mode: LaunchMode.externalApplication,
+          mode: LaunchMode.inAppWebView,
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
